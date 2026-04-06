@@ -12,7 +12,7 @@ const selectedChain = getSelectedChain();
 const selectedRpcUrl = getSelectedRpcUrl();
 
 const config = getDefaultConfig({
-  appName: "Fan Donation Platform",
+  appName: "Somnia Private Pay-Per-View",
   projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID ?? "",
   chains: [selectedChain],
   wallets: [

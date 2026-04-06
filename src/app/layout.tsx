@@ -8,12 +8,13 @@ import PageTransitionWrapper from "@/components/PageTransitionWrapper";
 import { ThemeProvider } from "@/app/theme-provider";
 import { Toaster } from "@/components/ui/toaster";
 import BottomNav from "@/components/BottomNav";
+import { WalletStateProvider } from "@/context/wallet-state";
 
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Fan Funding",
-  description: "",
+  title: "Somnia Private Pay-Per-View",
+  description: "Aleo privacy + Somnia STT rental access + Verulink proof relay",
 };
 
 export default function RootLayout({
@@ -31,12 +32,14 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           <Providers>
-            <div className="min-h-screen bg-background dark:bg-gradient-to-b dark:from-slate-950 dark:via-slate-900 dark:to-slate-950">
-              <Navbar />
-              <PageTransitionWrapper>{children}</PageTransitionWrapper>
-              <Toaster />
-              <BottomNav />
-            </div>
+            <WalletStateProvider>
+              <div className="min-h-screen bg-background dark:bg-gradient-to-b dark:from-slate-950 dark:via-slate-900 dark:to-slate-950">
+                <Navbar />
+                <PageTransitionWrapper>{children}</PageTransitionWrapper>
+                <Toaster />
+                <BottomNav />
+              </div>
+            </WalletStateProvider>
           </Providers>
         </ThemeProvider>
       </body>

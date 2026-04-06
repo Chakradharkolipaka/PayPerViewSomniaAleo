@@ -1,96 +1,98 @@
-# Fan Funding Platform (Etherlink + Somnia testnets)
+# Somnia Private Pay-Per-View (Aleo + Verulink + Next.js)
 
-A decentralized fan funding platform where creators can mint NFTs and receive direct funding from their supporters.
+A dual-chain pay-per-view app where:
 
-This repo now supports **multiple EVM testnets**:
+- **Aleo (Leo)** stores private encrypted YouTube URLs as records
+- **Somnia EVM (Solidity)** handles STT payments, access, and expiry
+- **Verulink** relays Aleo ZK proofs to Somnia verifier contracts
+- **Next.js App Router** powers UI and API endpoints
+- **Node backend worker** listens to events and triggers Aleo/Somnia actions
 
-- **Etherlink Shadownet** (default)
-- **Somnia Dream Testnet** (https://docs.somnia.network/)
+## Why this architecture
 
-You can switch the active target network using an environment variable (or an interactive script).
+- No plaintext YouTube URL is stored on-chain
+- Access is non-transferable and viewer-bound
+- Rental access is time-limited (30 days)
+- Proof verification is bridged correctly for Aleo ↔ EVM curve mismatch
 
-## 🌐 Supported networks
+## Constraint policy (enforced)
 
-### Etherlink Shadownet
+- No IPFS usage
+- No X402 usage
+- Somnia-only Solidity deployment target
+- STT native payment only (`msg.value`)
+- No permanent purchase model (30-day rental only)
+- No backend storage of private/view keys
+- No transferability for Aleo access records or AccessNFT
 
-- Chain ID: **127823**
-- Default RPC: `https://node.shadownet.etherlink.com`
+## Project structure
 
-### Somnia Dream Testnet
+- `aleo/video_access.aleo` — Leo program
+- `contracts/AccessNFT.sol` — non-transferable ERC-721 with expiry
+- `contracts/PayPerView.sol` — STT rental payments + refund logic
+- `contracts/ProofVerifier.sol` — Verulink/Aleo proof verification bridge target
+- `src/app/videos/[videoId]/page.tsx` — watch flow (pay → proof → stream)
+- `src/app/api/encrypt-url/route.ts` — backend-gated URL encryption endpoint
+- `src/app/api/stream/route.ts` — stream entitlement + signed URL endpoint
+- `backend/index.mjs` — event worker (payment + access grant orchestration)
 
-- Chain ID: **50312**
-- Default RPC: `https://dream-rpc.somnia.network/`
+## Smart contract events consumed by backend
 
-## 🛠️ Tech Stack
+- `PaymentReceived(address viewer, uint256 videoId, uint256 amount, uint256 expiry)`
+- `AccessGranted(address viewer, uint256 videoId, uint256 timestamp)`
 
-- **Frontend**: Next.js 14, React, TailwindCSS, RainbowKit
-- **Smart Contracts**: Solidity 0.8.20, Hardhat
-- **Blockchain**: Etherlink + Somnia testnets
-- **Storage**: IPFS via Pinata
+## Setup
 
-## 📦 Installation
+1. Install dependencies
+2. Configure environment variables
+3. Compile/test contracts
+4. Deploy contracts to Somnia testnet
+5. Configure Verulink + Aleo program
+6. Run frontend and backend worker
 
-```bash
-npm install --legacy-peer-deps
-```
+### Required `.env.local` keys (minimum)
 
-## 🔧 Configure environment variables
-
-Create a `.env.local` in `FanDonorOnEtherLink-main/`.
-
-Minimum recommended variables:
-
-- `NEXT_PUBLIC_NETWORK` = `etherlink` or `somnia`
 - `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID`
-- `NEXT_PUBLIC_PINATA_JWT`
+- `NEXT_PUBLIC_SOMNIA_RPC_URL`
+- `NEXT_PUBLIC_PAYPERVIEW_ADDRESS`
+- `NEXT_PUBLIC_ACCESS_NFT_ADDRESS`
+- `NEXT_PUBLIC_PROOF_VERIFIER_ADDRESS`
+- `NEXT_PUBLIC_VERULINK_RELAY_URL`
+- `STREAM_URL_SIGNING_SECRET`
+- `INTERNAL_SERVICE_TOKEN`
+- `SOMNIA_RPC_URL`
+- `SOMNIA_WS_RPC_URL`
+- `BACKEND_OPERATOR_PRIVATE_KEY`
+- `VERULINK_ALEO_VERIFIER_ADDRESS`
+- `YOUTUBE_URL_VIDEO_1` (and additional IDs as needed)
 
-Contract address (multi-network supported):
+## Typical dev flow
 
-- `NEXT_PUBLIC_ETHERLINK_CONTRACT_ADDRESS` (when `NEXT_PUBLIC_NETWORK=etherlink`)
-- `NEXT_PUBLIC_SOMNIA_CONTRACT_ADDRESS` (when `NEXT_PUBLIC_NETWORK=somnia`)
+- Open `/videos/1`
+- Pay STT via MetaMask on Somnia
+- Backend sees `PaymentReceived`, encrypts URL, submits Aleo `grant_access`, then calls `activateAccess`
+- User generates Aleo proof client-side in Leo wallet
+- Frontend relays proof via Verulink
+- `ProofVerifier.sol` emits `AccessGranted`
+- `/api/stream` validates access and returns 15-minute signed URL
 
-RPC config:
+## Known limitations (acknowledged)
 
-- `NEXT_PUBLIC_ETHERLINK_RPC_URL` (optional)
-- `NEXT_PUBLIC_SOMNIA_RPC_URL` (optional)
-- `NEXT_PUBLIC_RPC_URL` (legacy/generic fallback)
+- First proof generation may take ~1–3 seconds
+- Verulink introduces a trusted-relayer surface
+- Aleo mainnet interoperability is still maturing (testnet-first)
+- Aleo and EVM curves differ (`BLS12-377` vs `BLS12-381`) so native EVM verification is not possible
+- YouTube signed URLs are short-lived and must be refreshed
+- Somnia is the only supported EVM deployment target
 
-Legacy support:
+## Security notes
 
-- `NEXT_PUBLIC_CONTRACT_ADDRESS` still works as a fallback if you don’t want per-network addresses.
+- No plaintext URL should be written to chain or public DB
+- `AccessNFT` transfers are blocked by design
+- Streaming endpoint validates on-chain access before serving URL
+- Access expiry must be valid in both Aleo proof context and Somnia state
 
-## 🔀 Switch networks (interactive)
+## Cleanup notes
 
-Run the helper and choose `etherlink` or `somnia`. It updates `.env.local`.
-
-```bash
-npm run network:select
-```
-
-Then restart the dev server.
-
-## 🔧 Development
-
-```bash
-npm run dev
-```
-
-## 🌐 Deployment
-
-The app can be deployed on Vercel.
-
-Environment variables needed (recommended):
-
-- `NEXT_PUBLIC_NETWORK`
-- `NEXT_PUBLIC_ETHERLINK_CONTRACT_ADDRESS`
-- `NEXT_PUBLIC_SOMNIA_CONTRACT_ADDRESS`
-- `NEXT_PUBLIC_ETHERLINK_RPC_URL` (optional)
-- `NEXT_PUBLIC_SOMNIA_RPC_URL` (optional)
-- `NEXT_PUBLIC_PINATA_JWT`
-- `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID`
-
-If you keep using the original single-network approach, you can still use:
-
-- `NEXT_PUBLIC_CONTRACT_ADDRESS`
-- `NEXT_PUBLIC_RPC_URL`
+Legacy donation/mint/IPFS flows are intentionally deprecated and replaced by this architecture.
 
