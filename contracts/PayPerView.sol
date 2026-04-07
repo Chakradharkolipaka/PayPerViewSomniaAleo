@@ -17,7 +17,9 @@ interface IAccessNFT {
  *   AccessMinted(buyer, videoId, tokenId)    → trigger "Access granted" popup
  */
 contract PayPerView is ReentrancyGuard {
-    uint256 public constant PRICE = 0.005 ether; // 0.005 STT
+    uint256 public constant PRICE = 0.005 ether; // 0.005 STT – primary constant used in pay()
+    // VID_PRICE mirrors PRICE in plain wei for spec compliance and off-chain tooling.
+    uint256 public constant VID_PRICE = 5_000_000_000_000_000; // 0.005 STT in wei
     address public immutable owner;
     IAccessNFT public immutable accessNFT;
 
@@ -32,6 +34,11 @@ contract PayPerView is ReentrancyGuard {
         uint256 tokenId
     );
 
+    error WrongPayment();
+    error UnsupportedVideo();
+    error AlreadyConsumed();
+    error Unauthorized();
+    error MintFailed();
     error IncorrectPayment(uint256 sent, uint256 required);
     error ZeroAddress();
     error WithdrawFailed();
@@ -56,16 +63,19 @@ contract PayPerView is ReentrancyGuard {
         emit PaymentReceived(msg.sender, videoId, 0); // tokenId TBD
 
         tokenId = accessNFT.mintAccess(msg.sender, videoId);
+        // AccessNFT._nextId starts at 0 and is pre-incremented (++_nextId),
+        // so a returned tokenId of 0 indicates a minting failure.
+        if (tokenId == 0) revert MintFailed();
 
         emit AccessMinted(msg.sender, videoId, tokenId);
     }
 
     /**
      * @notice Withdraw proceeds from video sales.
-     * @dev Only the owner can withdraw.
+     * @dev Only the owner can withdraw. Reverts with Unauthorized if caller is not owner.
      */
     function withdraw() external {
-        require(msg.sender == owner, "Not owner");
+        if (msg.sender != owner) revert Unauthorized();
         uint256 balance = address(this).balance;
 
         (bool sent, ) = payable(owner).call{value: balance}("");
