@@ -1,143 +1,74 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
-interface IAccessNFTMinter {
-    function mintAccess(
-        address viewer,
-        uint256 videoId,
-        uint256 expiresAt
-    ) external returns (uint256 tokenId);
-
-    function hasActiveAccess(
-        address viewer,
-        uint256 videoId
-    ) external view returns (bool);
+interface IAccessNFT {
+    function mintAccess(address to, uint256 videoId) external returns (uint256);
 }
 
-contract PayPerView is Ownable, ReentrancyGuard {
-    uint256 public constant RENTAL_DURATION = 30 days;
-    uint256 public constant REFUND_WINDOW = 24 hours;
-
-    struct Payment {
-        uint256 amount;
-        uint256 paidAt;
-        bool refunded;
-    }
-
-    IAccessNFTMinter public immutable accessNFT;
-
-    mapping(uint256 => uint256) public videoPrice;
-    mapping(address => mapping(uint256 => uint256)) public accessExpiry;
-    mapping(address => mapping(uint256 => bool)) public accessActivated;
-    mapping(address => mapping(uint256 => Payment)) public payments;
+/**
+ * @title PayPerView
+ * @notice Fixed-price single-view payment contract on Somnia.
+ * @dev Pay 0.005 STT → mints one AccessNFT → NFT burned on view.
+ *
+ * POPUP STATES exposed to frontend via events:
+ *   PaymentReceived(buyer, videoId, tokenId) → trigger "Payment confirmed" popup
+ *   AccessMinted(buyer, videoId, tokenId)    → trigger "Access granted" popup
+ */
+contract PayPerView is ReentrancyGuard {
+    uint256 public constant PRICE = 0.005 ether; // 0.005 STT
+    address public immutable owner;
+    IAccessNFT public immutable accessNFT;
 
     event PaymentReceived(
-        address indexed viewer,
+        address indexed buyer,
         uint256 indexed videoId,
-        uint256 amount,
-        uint256 expiry
+        uint256 tokenId
     );
-    event AccessActivated(
-        address indexed viewer,
+    event AccessMinted(
+        address indexed buyer,
         uint256 indexed videoId,
-        uint256 tokenId,
-        uint256 expiry
+        uint256 tokenId
     );
-    event RefundClaimed(
-        address indexed viewer,
-        uint256 indexed videoId,
-        uint256 amount
-    );
-    event VideoPriceUpdated(uint256 indexed videoId, uint256 price);
 
-    constructor(
-        address accessNftAddress,
-        address initialOwner
-    ) Ownable(initialOwner) {
-        accessNFT = IAccessNFTMinter(accessNftAddress);
+    error IncorrectPayment(uint256 sent, uint256 required);
+    error ZeroAddress();
+    error WithdrawFailed();
+
+    constructor(address _accessNFT) {
+        if (_accessNFT == address(0)) revert ZeroAddress();
+        owner = msg.sender;
+        accessNFT = IAccessNFT(_accessNFT);
     }
 
-    function setVideoPrice(uint256 videoId, uint256 price) external onlyOwner {
-        require(price > 0, "Price must be > 0");
-        videoPrice[videoId] = price;
-        emit VideoPriceUpdated(videoId, price);
-    }
-
-    function payForVideo(uint256 videoId) external payable nonReentrant {
-        uint256 price = videoPrice[videoId];
-        require(price > 0, "Video unavailable");
-        require(msg.value == price, "Incorrect STT amount");
-        require(
-            !hasActiveAccess(msg.sender, videoId),
-            "Already has active access"
-        );
-
-        uint256 expiry = block.timestamp + RENTAL_DURATION;
-
-        accessExpiry[msg.sender][videoId] = expiry;
-        accessActivated[msg.sender][videoId] = false;
-        payments[msg.sender][videoId] = Payment({
-            amount: msg.value,
-            paidAt: block.timestamp,
-            refunded: false
-        });
-
-        emit PaymentReceived(msg.sender, videoId, msg.value, expiry);
-    }
-
-    function activateAccess(
-        address viewer,
+    /**
+     * @notice Pay for single-view access to a video.
+     * @param videoId  The video identifier (matches frontend VIDEO_IDS constant).
+     * @dev  Reverts with IncorrectPayment if msg.value != PRICE.
+     *       Frontend must show popup: "Confirm payment of 0.005 STT in your wallet."
+     */
+    function pay(
         uint256 videoId
-    ) external onlyOwner returns (uint256 tokenId) {
-        Payment memory payment = payments[viewer][videoId];
+    ) external payable nonReentrant returns (uint256 tokenId) {
+        if (msg.value != PRICE) revert IncorrectPayment(msg.value, PRICE);
 
-        require(payment.amount > 0, "No payment");
-        require(!payment.refunded, "Already refunded");
-        require(!accessActivated[viewer][videoId], "Already activated");
+        emit PaymentReceived(msg.sender, videoId, 0); // tokenId TBD
 
-        uint256 expiry = accessExpiry[viewer][videoId];
-        require(expiry > block.timestamp, "Payment expired");
+        tokenId = accessNFT.mintAccess(msg.sender, videoId);
 
-        tokenId = accessNFT.mintAccess(viewer, videoId, expiry);
-        accessActivated[viewer][videoId] = true;
-
-        emit AccessActivated(viewer, videoId, tokenId, expiry);
+        emit AccessMinted(msg.sender, videoId, tokenId);
     }
 
-    function claimRefund(uint256 videoId) external nonReentrant {
-        Payment storage payment = payments[msg.sender][videoId];
+    /**
+     * @notice Withdraw proceeds from video sales.
+     * @dev Only the owner can withdraw.
+     */
+    function withdraw() external {
+        require(msg.sender == owner, "Not owner");
+        uint256 balance = address(this).balance;
 
-        require(payment.amount > 0, "No payment");
-        require(!payment.refunded, "Already refunded");
-        require(
-            !accessActivated[msg.sender][videoId],
-            "Access already activated"
-        );
-        require(
-            block.timestamp <= payment.paidAt + REFUND_WINDOW,
-            "Refund window closed"
-        );
-
-        uint256 refundAmount = payment.amount;
-        payment.refunded = true;
-        payment.amount = 0;
-
-        (bool sent, ) = payable(msg.sender).call{value: refundAmount}("");
-        require(sent, "Refund failed");
-
-        emit RefundClaimed(msg.sender, videoId, refundAmount);
-    }
-
-    function hasActiveAccess(
-        address viewer,
-        uint256 videoId
-    ) public view returns (bool) {
-        uint256 expiry = accessExpiry[viewer][videoId];
-        if (expiry <= block.timestamp) return false;
-        if (!accessActivated[viewer][videoId]) return false;
-        return accessNFT.hasActiveAccess(viewer, videoId);
+        (bool sent, ) = payable(owner).call{value: balance}("");
+        if (!sent) revert WithdrawFailed();
     }
 }

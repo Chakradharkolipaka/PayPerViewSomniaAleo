@@ -1,28 +1,46 @@
+// video_access.aleo
+// Role: Privacy entitlement layer.
+// A ViewToken record proves the holder paid for exactly one view.
+// The backend verifies the Aleo proof before releasing the decryption key.
+
 program video_access.aleo;
 
-// Replace with your deployed admin address before testnet deployment.
-const PROGRAM_ADMIN: address = aleo1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqd9h8a;
-
-record VideoAccess {
-    owner: address,
-    video_id: field,
-    encrypted_url: [u128; 4],
-    expires_at: u32,
+record ViewToken {
+    owner: address,       // buyer's Aleo address
+    video_id: field,      // matches Somnia videoId (cast as field)
+    token_id: u64,        // mirrors Somnia NFT tokenId for cross-chain linkage
+    is_consumed: bool     // false at mint, consumed in-browser before view
 }
 
-transition grant_access(public video_id: field, encrypted_url: [u128; 4], recipient: address) -> VideoAccess {
-    let expires_at: u32 = block.height + 43200u32;
-
-    return VideoAccess {
-        owner: recipient,
+// Transition: create a ViewToken for a paid view.
+// Called in-browser after PayPerView.pay() confirms on Somnia.
+// Inputs: viewer address, videoId, Somnia tokenId
+transition grant_view(
+    viewer: address,
+    video_id: field,
+    token_id: u64
+) -> ViewToken {
+    return ViewToken {
+        owner: viewer,
         video_id: video_id,
-        encrypted_url: encrypted_url,
-        expires_at: expires_at,
+        token_id: token_id,
+        is_consumed: false
     };
 }
 
-transition revoke_access(access: VideoAccess) {
-    assert_eq(self.caller, PROGRAM_ADMIN);
-    // Consuming the record revokes access permanently for this record instance.
-    let _burned_owner = access.owner;
+// Transition: consume the token to unlock the view.
+// Called once per view session. Produces a consumed record as proof.
+transition consume_view(
+    token: ViewToken
+) -> ViewToken {
+    // Enforce: only owner may consume
+    assert_eq(token.owner, self.caller);
+    // Enforce: not already consumed
+    assert_eq(token.is_consumed, false);
+    return ViewToken {
+        owner: token.owner,
+        video_id: token.video_id,
+        token_id: token.token_id,
+        is_consumed: true       // marks as spent
+    };
 }

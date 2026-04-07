@@ -19,9 +19,9 @@ export function PayPerViewModal({ open, onOpenChange, onPay, priceWei, processin
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Rent this video for 30 days</DialogTitle>
+          <DialogTitle>Buy single-view access</DialogTitle>
           <DialogDescription>
-            Payment is processed on Somnia using native STT. Refund is available for 24 hours only if access was not activated.
+            Payment is processed on Somnia using native STT. One successful payment mints exactly one single-use access NFT.
           </DialogDescription>
         </DialogHeader>
 

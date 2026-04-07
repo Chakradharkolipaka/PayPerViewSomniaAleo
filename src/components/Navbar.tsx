@@ -20,7 +20,7 @@ export default function Navbar() {
             <span className="flex flex-col">
               <span className="text-sm font-semibold leading-tight">Private Pay-Per-View</span>
               <span className="text-xs text-muted-foreground leading-tight">
-                Aleo + Somnia rental access
+                Aleo + Somnia one-time view access
               </span>
             </span>
           </Link>

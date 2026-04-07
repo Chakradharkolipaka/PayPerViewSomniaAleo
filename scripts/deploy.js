@@ -50,7 +50,7 @@ async function main() {
   console.log(`PayPerView deployed: ${ppvAddress}`);
 
   const verifierFactory = new ethers.ContractFactory(verifierArtifact.abi, verifierArtifact.bytecode, wallet);
-  const proofVerifier = await verifierFactory.deploy(verulinkVerifierAddress, ppvAddress, accessAddress);
+  const proofVerifier = await verifierFactory.deploy(verulinkVerifierAddress, accessAddress);
   await proofVerifier.waitForDeployment();
   const proofAddress = await proofVerifier.getAddress();
   console.log(`ProofVerifier deployed: ${proofAddress}`);

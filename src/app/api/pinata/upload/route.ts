@@ -4,7 +4,7 @@ export const runtime = "nodejs";
 
 export async function POST() {
   return NextResponse.json(
-    { error: "IPFS upload disabled in this architecture. Use /api/encrypt-url." },
+    { error: "Endpoint removed. Use /api/content for encrypted static asset metadata." },
     { status: 410 }
   );
 }

@@ -14,7 +14,7 @@ const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
   title: "Somnia Private Pay-Per-View",
-  description: "Aleo privacy + Somnia STT rental access + Verulink proof relay",
+  description: "Aleo privacy + Somnia single-use NFT access + encrypted static content",
 };
 
 export default function RootLayout({

@@ -1,122 +1,136 @@
+/**
+ * backend/index.mjs
+ * Minimal PayPerView backend.
+ *
+ * Responsibilities:
+ *   POST /api/verify-and-serve  →  check NFT, return decryption key, burn NFT
+ *   GET  /api/video-meta/:id    →  public video metadata (title, thumbnail, price)
+ *
+ * DEBUG: Set LOG_LEVEL=debug in env to see all verification steps.
+ */
+
+import express from "express";
 import { ethers } from "ethers";
-import crypto from "crypto";
-import { submitGrantAccessToAleo } from "./aleo-client.mjs";
 
-const rpcUrl = process.env.SOMNIA_RPC_URL || "https://dream-rpc.somnia.network/";
-const wsRpcUrl = process.env.SOMNIA_WS_RPC_URL || rpcUrl;
-const privateKey = process.env.BACKEND_OPERATOR_PRIVATE_KEY;
-const aleoMockMode = (process.env.ALEO_MOCK_MODE || "true").toLowerCase() === "true";
+const app = express();
+app.use(express.json());
 
-const payPerViewAddress = process.env.NEXT_PUBLIC_PAYPERVIEW_ADDRESS;
-const proofVerifierAddress = process.env.NEXT_PUBLIC_PROOF_VERIFIER_ADDRESS;
+const DEBUG = process.env.LOG_LEVEL === "debug";
+const log = (...args) => DEBUG && console.debug("[backend]", ...args);
 
-if (!privateKey || !payPerViewAddress || !proofVerifierAddress) {
-  console.error("Missing backend env vars: BACKEND_OPERATOR_PRIVATE_KEY/NEXT_PUBLIC_PAYPERVIEW_ADDRESS/NEXT_PUBLIC_PROOF_VERIFIER_ADDRESS");
-  process.exit(1);
-}
+// Somnia RPC + contracts
+const provider = new ethers.JsonRpcProvider(process.env.SOMNIA_RPC_URL);
+const backendWallet = new ethers.Wallet(process.env.BACKEND_PRIVATE_KEY, provider);
 
-const provider = new ethers.JsonRpcProvider(rpcUrl);
-const wsProvider = new ethers.WebSocketProvider(wsRpcUrl);
-const signer = new ethers.Wallet(privateKey, provider);
-
-const payPerViewAbi = [
-  "event PaymentReceived(address indexed viewer, uint256 indexed videoId, uint256 amount, uint256 expiry)",
-  "function activateAccess(address viewer, uint256 videoId) external returns (uint256)",
+// Minimal AccessNFT interface for backend
+const accessNFTAbi = [
+  "function ownerOf(uint256 tokenId) external view returns (address)",
+  "function consumed(uint256 tokenId) external view returns (bool)",
+  "function tokenVideo(uint256 tokenId) external view returns (uint256)",
+  "function consumeAccess(uint256 tokenId) external",
 ];
 
-const proofVerifierAbi = [
-  "event AccessGranted(address indexed viewer, uint256 indexed videoId, uint256 timestamp)",
-];
+const nftContract = new ethers.Contract(
+  process.env.ACCESS_NFT_ADDRESS,
+  accessNFTAbi,
+  backendWallet
+);
 
-const payPerView = new ethers.Contract(payPerViewAddress, payPerViewAbi, signer);
-const proofVerifier = new ethers.Contract(proofVerifierAddress, proofVerifierAbi, wsProvider);
+/**
+ * POST /api/verify-and-serve
+ * Body: { tokenId: number, viewerAddress: string, consumedAleoRecord: string }
+ *
+ * POPUP STATES returned to frontend:
+ *   status: "verifying"   → "Verifying your access token..."
+ *   status: "serving"     → "Unlocking content..."
+ *   status: "consumed"    → "View started. Enjoy!"
+ *   status: "error"       → show error.message to user
+ */
+app.post("/api/verify-and-serve", async (req, res) => {
+  const { tokenId, viewerAddress, consumedAleoRecord } = req.body;
 
-const accessEventCache = new Map();
+  log("verify-and-serve request", { tokenId, viewerAddress });
 
-function key(viewer, videoId) {
-  return `${viewer.toLowerCase()}:${videoId.toString()}`;
-}
-
-function encryptYoutubeUrl(youtubeUrl, aleoAddress) {
-  const aesKey = crypto.createHash("sha256").update(aleoAddress).digest();
-  const iv = crypto.randomBytes(16);
-  const cipher = crypto.createCipheriv("aes-256-cbc", aesKey, iv);
-  const encrypted = Buffer.concat([cipher.update(youtubeUrl, "utf8"), cipher.final()]);
-  const payload = Buffer.concat([iv, encrypted]);
-
-  const chunks = [];
-  const padded = payload.length > 64 ? payload.subarray(0, 64) : Buffer.concat([payload, Buffer.alloc(64 - payload.length)]);
-
-  for (let i = 0; i < 4; i++) {
-    const chunkBytes = padded.subarray(i * 16, i * 16 + 16);
-    chunks.push(BigInt(`0x${chunkBytes.toString("hex") || "0"}`).toString());
-  }
-
-  return chunks;
-}
-
-async function grantAleoAccess({ viewerAleoAddress, videoId, encryptedUrlChunks }) {
-  if (aleoMockMode) {
-    console.warn("⚠️ ALEO_MOCK_MODE=true, using synthetic Aleo tx hash");
-    return {
-      txHash: `aleo_mock_${Date.now()}_${viewerAleoAddress.slice(0, 10)}_${videoId}`,
-    };
-  }
-
-  return submitGrantAccessToAleo({
-    viewerAleoAddress,
-    videoId,
-    encryptedUrlChunks,
-  });
-}
-
-function getYoutubeUrlForVideo(videoId) {
-  return process.env[`YOUTUBE_URL_VIDEO_${videoId}`];
-}
-
-payPerView.on("PaymentReceived", async (viewer, videoId, amount, expiry, event) => {
   try {
-    console.log("PaymentReceived:", { viewer, videoId: videoId.toString(), amount: amount.toString(), expiry: expiry.toString(), tx: event.log.transactionHash });
+    // 1. Confirm NFT owner on Somnia
+    const owner = await nftContract.ownerOf(tokenId);
+    log("NFT owner", owner);
 
-    const viewerAleoAddress = process.env[`VIEWER_ALEO_ADDRESS_${viewer.toLowerCase()}`];
-    if (!viewerAleoAddress) {
-      console.warn(`Missing viewer Aleo address mapping for ${viewer}`);
-      return;
+    if (owner.toLowerCase() !== viewerAddress.toLowerCase()) {
+      return res.status(403).json({
+        status: "error",
+        message: "You do not own this access token. Please purchase first.",
+      });
     }
 
-    const youtubeUrl = getYoutubeUrlForVideo(videoId.toString());
-    if (!youtubeUrl) {
-      console.warn(`Missing YOUTUBE_URL_VIDEO_${videoId.toString()}`);
-      return;
+    // 2. Confirm token is not already consumed
+    const alreadyConsumed = await nftContract.consumed(tokenId);
+    if (alreadyConsumed) {
+      return res.status(403).json({
+        status: "error",
+        message: "This access token has already been used. Purchase again to watch.",
+      });
     }
 
-    const encryptedUrlChunks = encryptYoutubeUrl(youtubeUrl, viewerAleoAddress);
+    // 3. Return encrypted content decryption key
+    //    In production: keys stored in a secrets manager, one per videoId
+    const videoId = await nftContract.tokenVideo(tokenId);
+    const decryptionKey = process.env[`DECRYPTION_KEY_VIDEO_${videoId}`];
 
-    const aleoGrant = await grantAleoAccess({
-      viewerAleoAddress,
-      videoId: videoId.toString(),
-      encryptedUrlChunks,
+    if (!decryptionKey) {
+      return res.status(500).json({
+        status: "error",
+        message: "Content key not found. Contact support.",
+      });
+    }
+
+    log("serving decryption key for video", videoId.toString());
+
+    // 4. Burn the NFT (consume access) — fire and forget
+    nftContract.consumeAccess(tokenId).catch((err) => {
+      console.error("[backend] NFT burn failed", err.message);
+      // Non-fatal: key was already served. Log for manual reconciliation.
     });
 
-    console.log("Aleo grant_access tx:", aleoGrant.txHash);
-
-    const tx = await payPerView.activateAccess(viewer, videoId);
-    await tx.wait();
-    console.log("Access activated on Somnia:", tx.hash);
+    return res.json({
+      status: "consumed",
+      decryptionKey,
+      videoId: videoId.toString(),
+    });
   } catch (err) {
-    console.error("Failed payment processing:", err);
+    log("verify-and-serve error", err.message);
+    return res.status(500).json({
+      status: "error",
+      message: err.message || "Unknown error. Please try again.",
+    });
   }
 });
 
-proofVerifier.on("AccessGranted", (viewer, videoId, timestamp) => {
-  const cacheKey = key(viewer, videoId);
-  accessEventCache.set(cacheKey, {
-    timestamp: Number(timestamp),
-    observedAt: Date.now(),
-  });
-  console.log("AccessGranted cached:", cacheKey);
+/**
+ * GET /api/video-meta/:id
+ * Returns public metadata only — no keys, no URLs.
+ */
+app.get("/api/video-meta/:id", (req, res) => {
+  const id = parseInt(req.params.id);
+  const meta = VIDEO_CATALOG[id];
+  if (!meta) return res.status(404).json({ message: "Video not found" });
+  return res.json(meta);
 });
 
-console.log("Backend listeners started.");
-console.log(`HTTP RPC: ${rpcUrl}`);
-console.log(`WS RPC: ${wsRpcUrl}`);
+// Public video catalog — titles and thumbnails only
+const VIDEO_CATALOG = {
+  1: {
+    title: "Introduction to Zero-Knowledge Proofs",
+    thumbnail: "/thumbnails/1.jpg",
+    priceSTT: "0.005",
+  },
+  2: {
+    title: "Aleo Privacy Deep Dive",
+    thumbnail: "/thumbnails/2.jpg",
+    priceSTT: "0.005",
+  },
+};
+
+app.listen(process.env.PORT || 3001, () =>
+  console.log("[backend] PayPerView backend running on port", process.env.PORT || 3001)
+);

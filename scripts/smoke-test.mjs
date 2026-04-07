@@ -1,12 +1,11 @@
-import hre from "hardhat";
-
-const { ethers } = hre;
+import { network } from "hardhat";
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
 async function main() {
+  const { ethers } = await network.connect();
   const [owner, viewer] = await ethers.getSigners();
 
   const AccessNFT = await ethers.getContractFactory("AccessNFT");
@@ -24,7 +23,6 @@ async function main() {
   const ProofVerifier = await ethers.getContractFactory("ProofVerifier");
   const proofVerifier = await ProofVerifier.deploy(
     await mockVerifier.getAddress(),
-    await payPerView.getAddress(),
     await accessNFT.getAddress()
   );
   await proofVerifier.waitForDeployment();
@@ -33,22 +31,22 @@ async function main() {
   await (await accessNFT.setProofVerifier(await proofVerifier.getAddress())).wait();
 
   const videoId = 11n;
-  const price = ethers.parseEther("0.05");
+  const price = ethers.parseEther("0.005");
 
-  await (await payPerView.setVideoPrice(videoId, price)).wait();
   await (await payPerView.connect(viewer).payForVideo(videoId, { value: price })).wait();
-  await (await payPerView.activateAccess(viewer.address, videoId)).wait();
 
-  const active = await payPerView.hasActiveAccess(viewer.address, videoId);
-  assert(active, "Expected active access after activation");
+  const activeBeforeConsume = await payPerView.hasAccess(viewer.address, videoId);
+  assert(activeBeforeConsume, "Expected active access after payment");
 
-  const now = Math.floor(Date.now() / 1000);
-  await (await mockVerifier.setMockResult(true, now + 3600)).wait();
+  await (await mockVerifier.setMockResult(true, 0)).wait();
 
-  const verifyTx = await proofVerifier.verifyAndStream("0x1234", videoId, viewer.address);
+  const verifyTx = await proofVerifier.verifyAndConsume("0x1234", videoId, viewer.address);
   await verifyTx.wait();
 
-  console.log("Smoke test passed: payment -> activation -> proof verify flow is valid.");
+  const activeAfterConsume = await payPerView.hasAccess(viewer.address, videoId);
+  assert(!activeAfterConsume, "Expected access to be consumed after successful proof verification");
+
+  console.log("Smoke test passed: payment -> verify -> consume flow is valid.");
 }
 
 main().catch((err) => {

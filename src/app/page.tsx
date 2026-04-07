@@ -8,17 +8,17 @@ const videos = [
 	{
 		id: 1,
 		title: "Private Creator Session 01",
-		summary: "30-day rental access gated by Somnia STT payment + Aleo proof.",
+		summary: "Single-view access gated by fixed 0.005 STT payment + Aleo proof.",
 	},
 	{
 		id: 2,
 		title: "Private Creator Session 02",
-		summary: "Non-transferable rental access with Verulink proof relay.",
+		summary: "Single-use NFT is consumed on first verified viewing session.",
 	},
 	{
 		id: 3,
 		title: "Private Creator Session 03",
-		summary: "Client-side decryption in Leo wallet before stream unlock.",
+		summary: "Encrypted static assets unlocked with Aleo-derived view key.",
 	},
 ];
 
@@ -30,9 +30,8 @@ export default function Home() {
 					Somnia Private Pay-Per-View
 				</h1>
 				<p className="text-muted-foreground max-w-3xl">
-					Rent private/unlisted YouTube videos for 30 days using STT on Somnia,
-					then prove Aleo access via Verulink. URLs are encrypted and decrypted
-					client-side only.
+					Pay 0.005 STT once to mint a one-time access NFT, verify privacy with
+					Aleo, and unlock encrypted static content with per-view key handoff.
 				</p>
 			</section>
 

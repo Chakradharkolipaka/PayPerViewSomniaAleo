@@ -15,7 +15,7 @@ export interface MockAleoVerifier$Type {
   readonly deployedLinkReferences: {};
   readonly immutableReferences: {};
   readonly inputSourceName: "project/contracts/MockAleoVerifier.sol";
-  readonly buildInfoId: "solc-0_8_24-d4c6f0fd675a8116ca7120a79482c0b124853b8c";
+  readonly buildInfoId: "solc-0_8_24-5205c465e4578ca58f4ea9cb357eb2061c8d2516";
 };
 
 import "hardhat/types/artifacts";

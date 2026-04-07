@@ -2,12 +2,17 @@ const DEFAULT_ALEO_RPC = "https://api.explorer.provable.com/v1";
 
 function toAleoU128Array(chunks) {
   if (!Array.isArray(chunks) || chunks.length !== 4) {
-    throw new Error("encryptedUrlChunks must be [u128;4]");
+    throw new Error("viewKeyChunks must be [u128;4]");
   }
   return `[${chunks.map((c) => `${c}u128`).join(", ")}]`;
 }
 
-export async function submitGrantAccessToAleo({ viewerAleoAddress, videoId, encryptedUrlChunks }) {
+export async function submitGrantAccessToAleo({
+  viewerAleoAddress,
+  videoId,
+  tokenId,
+  viewKeyChunks,
+}) {
   const programId = process.env.ALEO_PROGRAM_ID;
   const aleoPrivateKey = process.env.ALEO_PRIVATE_KEY;
   const aleoRpcUrl = process.env.ALEO_RPC_URL || DEFAULT_ALEO_RPC;
@@ -35,7 +40,8 @@ export async function submitGrantAccessToAleo({ viewerAleoAddress, videoId, encr
 
   const inputs = [
     `${videoId}field`,
-    toAleoU128Array(encryptedUrlChunks),
+    `${tokenId}u64`,
+    toAleoU128Array(viewKeyChunks),
     viewerAleoAddress,
   ];
 

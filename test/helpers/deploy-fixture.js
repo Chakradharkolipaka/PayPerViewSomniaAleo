@@ -24,7 +24,6 @@ export async function deployFixture() {
   const ProofVerifier = await ethers.getContractFactory("ProofVerifier");
   const proofVerifier = await ProofVerifier.deploy(
     await mockVerifier.getAddress(),
-    await payPerView.getAddress(),
     await accessNFT.getAddress()
   );
   await proofVerifier.waitForDeployment();
