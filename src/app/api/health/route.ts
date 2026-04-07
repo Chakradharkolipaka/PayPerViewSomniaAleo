@@ -8,6 +8,7 @@ export async function GET() {
     accessNftAddress: Boolean(process.env.ACCESS_NFT_ADDRESS || process.env.NEXT_PUBLIC_ACCESS_NFT_ADDRESS),
     backendKey: Boolean(process.env.BACKEND_PRIVATE_KEY),
     ppvMasterKey: Boolean(process.env.PPV_MASTER_KEY),
+    blobStorage: Boolean(process.env.BLOB_READ_WRITE_TOKEN || process.env.VERCEL_BLOB_READ_WRITE_TOKEN),
   };
 
   return NextResponse.json({

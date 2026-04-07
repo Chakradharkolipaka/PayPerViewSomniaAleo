@@ -17,6 +17,10 @@ function canUseBlobStorage() {
   return Boolean(getBlobToken());
 }
 
+function isProduction() {
+  return process.env.NODE_ENV === "production";
+}
+
 function deriveVideoKey(videoId: number): Buffer {
   const masterKey = process.env.PPV_MASTER_KEY;
   if (!masterKey) {
@@ -28,6 +32,13 @@ function deriveVideoKey(videoId: number): Buffer {
 
 export async function POST(request: Request) {
   try {
+    if (isProduction() && !canUseBlobStorage()) {
+      return NextResponse.json(
+        { error: "BLOB_READ_WRITE_TOKEN is required in production for encrypted video storage." },
+        { status: 503 }
+      );
+    }
+
     const body = await request.formData();
     const title = String(body.get("title") || "").trim();
     const description = String(body.get("description") || "").trim();
@@ -86,6 +97,13 @@ export async function POST(request: Request) {
       });
       encryptedAssetUrl = blob.url;
     } else {
+      if (isProduction()) {
+        return NextResponse.json(
+          { error: "Encrypted storage is not configured for production." },
+          { status: 503 }
+        );
+      }
+
       const encryptedDir = path.join(process.cwd(), "public", "encrypted");
       await fs.mkdir(encryptedDir, { recursive: true });
       const encryptedPath = path.join(encryptedDir, encryptedName);

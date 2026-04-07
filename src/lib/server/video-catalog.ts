@@ -16,6 +16,10 @@ const STORAGE_DIR = path.join(process.cwd(), "storage");
 const CATALOG_FILE = path.join(STORAGE_DIR, "videos.json");
 const BLOB_CATALOG_PATH = "ppv/catalog/videos.json";
 
+function isProduction() {
+  return process.env.NODE_ENV === "production";
+}
+
 function getBlobToken() {
   return process.env.BLOB_READ_WRITE_TOKEN || process.env.VERCEL_BLOB_READ_WRITE_TOKEN;
 }
@@ -31,7 +35,7 @@ function isReadonlyFsError(error: unknown) {
 }
 
 async function ensureCatalogFile() {
-  if (canUseBlobStorage()) return;
+  if (canUseBlobStorage() || isProduction()) return;
 
   await fs.mkdir(STORAGE_DIR, { recursive: true });
 
@@ -53,6 +57,10 @@ async function writeVideoCatalog(items: VideoRecord[]) {
       token,
     });
     return;
+  }
+
+  if (isProduction()) {
+    throw new Error("Catalog storage is not configured for production.");
   }
 
   await ensureCatalogFile();
@@ -104,6 +112,8 @@ export async function setVideoEncryptedAsset(videoId: number, encryptedAssetUrl:
 
 async function readCatalogFromBlob(): Promise<VideoRecord[]> {
   const token = getBlobToken();
+  if (!token) return [];
+
   const result = await list({ prefix: BLOB_CATALOG_PATH, limit: 1, token });
   const blob = result.blobs.find((entry) => entry.pathname === BLOB_CATALOG_PATH) ?? result.blobs[0];
 
@@ -123,6 +133,10 @@ export async function readVideoCatalog(): Promise<VideoRecord[]> {
     } catch {
       return [];
     }
+  }
+
+  if (isProduction()) {
+    return [];
   }
 
   try {

@@ -8,17 +8,22 @@ export async function GET(
   _request: Request,
   { params }: { params: { id: string } }
 ) {
-  const videoId = Number(params.id);
+  try {
+    const videoId = Number(params.id);
 
-  if (!Number.isFinite(videoId)) {
-    return NextResponse.json({ error: "Invalid video id" }, { status: 400 });
+    if (!Number.isFinite(videoId)) {
+      return NextResponse.json({ error: "Invalid video id" }, { status: 400 });
+    }
+
+    const meta = await getVideoMeta(videoId);
+
+    if (!meta) {
+      return NextResponse.json({ error: "Video not found" }, { status: 404 });
+    }
+
+    return NextResponse.json({ videoId, ...meta });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to load video metadata.";
+    return NextResponse.json({ error: message }, { status: 503 });
   }
-
-  const meta = await getVideoMeta(videoId);
-
-  if (!meta) {
-    return NextResponse.json({ error: "Video not found" }, { status: 404 });
-  }
-
-  return NextResponse.json({ videoId, ...meta });
 }

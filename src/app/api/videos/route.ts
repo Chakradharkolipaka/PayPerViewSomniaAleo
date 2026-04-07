@@ -5,6 +5,11 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const videos = await listVideos();
-  return NextResponse.json({ videos });
+  try {
+    const videos = await listVideos();
+    return NextResponse.json({ videos });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to load videos.";
+    return NextResponse.json({ error: message, videos: [] }, { status: 503 });
+  }
 }
