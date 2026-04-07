@@ -87,6 +87,30 @@ async function testProofVerifyValid() {
   assert(typeof body?.message === "string", "body.message is a string");
 }
 
+// ─── POST /api/proof-verify – empty record (should be invalid) ───────────────
+async function testProofVerifyEmptyRecord() {
+  console.log("\nPOST /api/proof-verify (empty string record)");
+  const { status, body } = await fetchJSON("/api/proof-verify", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ record: "" }),
+  });
+  assert(status === 200, `status 200 (got ${status})`);
+  assert(body?.valid === false, `body.valid === false for empty record (got ${body?.valid})`);
+}
+
+// ─── POST /api/proof-verify – whitespace-only record (should be invalid) ─────
+async function testProofVerifyWhitespaceRecord() {
+  console.log("\nPOST /api/proof-verify (whitespace record)");
+  const { status, body } = await fetchJSON("/api/proof-verify", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ record: "   " }),
+  });
+  assert(status === 200, `status 200 (got ${status})`);
+  assert(body?.valid === false, `body.valid === false for whitespace record (got ${body?.valid})`);
+}
+
 // ─── POST /api/proof-verify – missing record ──────────────────────────────────
 async function testProofVerifyMissingRecord() {
   console.log("\nPOST /api/proof-verify (missing record)");
@@ -154,6 +178,8 @@ async function main() {
     testGetVideos,
     testMintMissingFields,
     testProofVerifyValid,
+    testProofVerifyEmptyRecord,
+    testProofVerifyWhitespaceRecord,
     testProofVerifyMissingRecord,
     testProofVerifyInvalidBody,
     testWatchGateMissingBody,

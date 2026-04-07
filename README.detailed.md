@@ -327,7 +327,7 @@ Prefer `/api/watch-gate/:videoId` for new integrations.
 - [ ] `BACKEND_PRIVATE_KEY` is NOT the same as the contract deployer key
 - [ ] S3 bucket is private (no public `GetObject`)
 - [ ] AccessNFT `setMinter` called exactly once (PayPerView address)
-- [ ] `pay()` reverts with `IncorrectPayment` for wrong value (verified by unit tests)
+- [ ] `pay()` reverts with `IncorrectPayment` for wrong value (verified by unit tests); `WrongPayment` is also declared in the ABI per spec
 - [ ] AccessNFT transfers revert with `NonTransferable` (verified by unit tests)
 - [ ] Full flow test: pay → mint → consume → decrypt passes end-to-end
 - [ ] All environment variables documented in `.env.example`

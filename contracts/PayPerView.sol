@@ -63,6 +63,8 @@ contract PayPerView is ReentrancyGuard {
         emit PaymentReceived(msg.sender, videoId, 0); // tokenId TBD
 
         tokenId = accessNFT.mintAccess(msg.sender, videoId);
+        // AccessNFT._nextId starts at 0 and is pre-incremented (++_nextId),
+        // so a returned tokenId of 0 indicates a minting failure.
         if (tokenId == 0) revert MintFailed();
 
         emit AccessMinted(msg.sender, videoId, tokenId);

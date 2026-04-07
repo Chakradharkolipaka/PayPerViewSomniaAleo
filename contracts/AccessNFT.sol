@@ -57,15 +57,15 @@ contract AccessNFT is ERC721, Ownable {
      * @dev Backend must call this after delivering decryption key.
      */
     function consumeAccess(uint256 tokenId) external {
-        _doConsume(tokenId);
+        _consume(tokenId);
     }
 
     /**
      * @notice Alias for consumeAccess. Burn token on consumption per spec.
-     * @dev Provided for spec compliance; delegates to _doConsume.
+     * @dev Provided for spec compliance; delegates to _consume.
      */
     function burnOnConsume(uint256 tokenId) external {
-        _doConsume(tokenId);
+        _consume(tokenId);
     }
 
     /**
@@ -76,7 +76,9 @@ contract AccessNFT is ERC721, Ownable {
     }
 
     /// @dev Shared consume logic: validates ownership and consumed state, then burns.
-    function _doConsume(uint256 tokenId) private {
+    /// NOTE: tokenId 0 cannot be returned by mintAccess() since _nextId starts at 0
+    /// and is pre-incremented (++_nextId), so the first minted tokenId is always ≥ 1.
+    function _consume(uint256 tokenId) private {
         if (consumed[tokenId]) revert AlreadyConsumed(tokenId);
         if (ownerOf(tokenId) != msg.sender && msg.sender != owner())
             revert NotTokenOwner(tokenId);
