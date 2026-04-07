@@ -65,6 +65,26 @@ contract AccessNFT is ERC721, Ownable {
         emit AccessConsumed(msg.sender, tokenId, tokenVideo[tokenId]);
     }
 
+    /**
+     * @notice Alias for consumeAccess. Burn token on consumption per spec.
+     * @dev Provided for spec compliance; delegates to consumeAccess.
+     */
+    function burnOnConsume(uint256 tokenId) external {
+        if (consumed[tokenId]) revert AlreadyConsumed(tokenId);
+        if (ownerOf(tokenId) != msg.sender && msg.sender != owner())
+            revert NotTokenOwner(tokenId);
+        consumed[tokenId] = true;
+        _burn(tokenId);
+        emit AccessConsumed(msg.sender, tokenId, tokenVideo[tokenId]);
+    }
+
+    /**
+     * @notice Returns the authorised minter address (the PayPerView contract).
+     */
+    function payPerView() external view returns (address) {
+        return minter;
+    }
+
     /// @dev Allow only mint (from=0) and burn (to=0), block peer-to-peer transfers.
     function _update(
         address to,
