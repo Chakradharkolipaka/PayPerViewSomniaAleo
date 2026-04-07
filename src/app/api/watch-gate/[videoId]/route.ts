@@ -29,7 +29,7 @@ export async function POST(
 ) {
   try {
     const pathVideoId = params.videoId;
-    if (!pathVideoId || !Number.isFinite(Number(pathVideoId))) {
+    if (!pathVideoId || !/^\d+$/.test(pathVideoId)) {
       return NextResponse.json(
         { status: "error", message: "Invalid videoId in path." },
         { status: 400 }

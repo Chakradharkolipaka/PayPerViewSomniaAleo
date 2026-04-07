@@ -8,8 +8,10 @@
  *   1. Start the dev server: npm run dev
  *   2. Run this file:       node test/api.spec.js
  *
- * The BASE_URL env var defaults to http://localhost:3000.
- * Set it to your staging URL for remote checks.
+ * Requirements:
+ *   - Node.js 18+ (built-in fetch, FormData, and Headers are required)
+ *   - BASE_URL env var defaults to http://localhost:3000.
+ *     Set it to your staging URL for remote checks.
  *
  * Each test calls a specific API route and asserts the HTTP status code
  * and key fields in the JSON response.

@@ -28,8 +28,17 @@ export const dynamic = "force-dynamic";
 /**
  * Verify an Aleo ViewToken record.
  *
+ * Real Aleo record format (for reference):
+ *   - Plaintext records start with `{ owner: aleo1..., ...}`
+ *   - Ciphertext records are base58-encoded strings (typically 100+ chars)
+ *   - Program records returned by the Leo wallet contain `record1...` prefix
+ *
+ * Production implementations should call the Aleo SDK `verifyExecution` or
+ * `SnarkVM::verify_proof` using the verifier key for `video_access.aleo` and
+ * the ALEO_SEED_PHRASE environment variable for signing authority.
+ *
  * @param record    - Serialised Aleo record ciphertext returned by grant_view / consume_view
- * @param programId - Aleo program ID (defaults to NEXT_PUBLIC_ALEO_PROGRAM_ID)
+ * @param _programId - Aleo program ID (reserved for future SDK integration)
  * @returns         - { valid: boolean, message: string }
  */
 function verifyAleoRecord(

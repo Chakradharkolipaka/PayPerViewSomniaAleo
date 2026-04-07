@@ -17,7 +17,8 @@ interface IAccessNFT {
  *   AccessMinted(buyer, videoId, tokenId)    → trigger "Access granted" popup
  */
 contract PayPerView is ReentrancyGuard {
-    uint256 public constant PRICE = 0.005 ether; // 0.005 STT
+    uint256 public constant PRICE = 0.005 ether; // 0.005 STT – primary constant used in pay()
+    // VID_PRICE mirrors PRICE in plain wei for spec compliance and off-chain tooling.
     uint256 public constant VID_PRICE = 5_000_000_000_000_000; // 0.005 STT in wei
     address public immutable owner;
     IAccessNFT public immutable accessNFT;
