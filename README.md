@@ -13,15 +13,11 @@ This app implements a fixed-price, single-view architecture:
 ### On Somnia
 
 - `PayPerView.sol`
-  - Fixed `VIEW_PRICE = 0.005 ether`
-  - `payForVideo(videoId)` mints one access NFT immediately
+  - Fixed `PRICE = 0.005 ether`
+  - `pay(videoId)` mints one access NFT immediately
 - `AccessNFT.sol`
   - Non-transferable single-use token
-  - `consumeAccess(viewer, videoId)` burns token after successful verification
-- `ProofVerifier.sol`
-  - `verifyAndConsume(aleoProof, videoId, viewer)`
-  - Verifies Aleo proof through external verifier contract
-  - Consumes NFT and emits `ViewAccessConsumed`
+  - `consumeAccess(tokenId)` burns token after successful verification
 
 ### On Aleo
 
@@ -63,11 +59,10 @@ This app implements a fixed-price, single-view architecture:
 - `NEXT_PUBLIC_SOMNIA_RPC_URL`
 - `NEXT_PUBLIC_PAYPERVIEW_ADDRESS`
 - `NEXT_PUBLIC_ACCESS_NFT_ADDRESS`
-- `NEXT_PUBLIC_PROOF_VERIFIER_ADDRESS`
 - `SOMNIA_RPC_URL`
-- `SOMNIA_WS_RPC_URL`
 - `PRIVATE_KEY`
-- `VERULINK_ALEO_VERIFIER_ADDRESS`
+- `BACKEND_PRIVATE_KEY`
+- `ACCESS_NFT_ADDRESS`
 - `ALEO_PROGRAM_ID`
 - `ALEO_PRIVATE_KEY`
 - `ALEO_RPC_URL`

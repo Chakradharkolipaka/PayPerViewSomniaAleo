@@ -53,7 +53,7 @@ npx hardhat run scripts/deploy.js --network somnia --tags AccessNFT
 npx hardhat run scripts/deploy.js --network somnia --tags PayPerView --access-nft 0x<ADDRESS_A>
 
 # Output: PayPerView deployed at 0x<ADDRESS_B>
-# → Save this address to .env.local: NEXT_PUBLIC_PAY_PER_VIEW_ADDRESS=0x<ADDRESS_B>
+# → Save this address to .env.local: NEXT_PUBLIC_PAYPERVIEW_ADDRESS=0x<ADDRESS_B>
 ```
 
 #### Step 3: Call setMinter()
@@ -278,7 +278,7 @@ grep -r "youtube\|youtu\.be\|youtube\.com" .next/ public/ --include="*.js" --inc
 # NEXT_PUBLIC_RPC_URL=https://somnia-testnet-rpc.allthatnode.com:8545
 # NEXT_PUBLIC_CHAIN_ID=102
 # NEXT_PUBLIC_ACCESS_NFT_ADDRESS=0x<ADDRESS_A>
-# NEXT_PUBLIC_PAY_PER_VIEW_ADDRESS=0x<ADDRESS_B>
+# NEXT_PUBLIC_PAYPERVIEW_ADDRESS=0x<ADDRESS_B>
 # NEXT_PUBLIC_ALEO_PROGRAM_ID=avideoac8qw9v6...
 # NEXT_PUBLIC_BACKEND_URL=https://backend.example.com
 # NEXT_PUBLIC_DEBUG=false

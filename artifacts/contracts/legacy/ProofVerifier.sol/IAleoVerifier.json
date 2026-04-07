@@ -1,7 +1,7 @@
 {
   "_format": "hh3-artifact-1",
   "contractName": "IAleoVerifier",
-  "sourceName": "contracts/ProofVerifier.sol",
+  "sourceName": "contracts/legacy/ProofVerifier.sol",
   "abi": [
     {
       "inputs": [
@@ -43,6 +43,6 @@
   "linkReferences": {},
   "deployedLinkReferences": {},
   "immutableReferences": {},
-  "inputSourceName": "project/contracts/ProofVerifier.sol",
-  "buildInfoId": "solc-0_8_24-5205c465e4578ca58f4ea9cb357eb2061c8d2516"
+  "inputSourceName": "project/contracts/legacy/ProofVerifier.sol",
+  "buildInfoId": "solc-0_8_24-e17d0153754dfdfb6830aeca6d65f5e6568c4d9e"
 }

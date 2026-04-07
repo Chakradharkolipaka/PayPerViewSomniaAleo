@@ -7,51 +7,33 @@ describe("Somnia PayPerView flow", function () {
     const [owner, viewer, other] = await ethers.getSigners();
 
     const AccessNFT = await ethers.getContractFactory("AccessNFT");
-    const accessNFT = await AccessNFT.deploy(owner.address);
+    const accessNFT = await AccessNFT.deploy();
     await accessNFT.waitForDeployment();
 
     const PayPerView = await ethers.getContractFactory("PayPerView");
-    const payPerView = await PayPerView.deploy(await accessNFT.getAddress(), owner.address);
+    const payPerView = await PayPerView.deploy(await accessNFT.getAddress());
     await payPerView.waitForDeployment();
 
-    const MockVerifier = await ethers.getContractFactory("MockAleoVerifier");
-    const mockVerifier = await MockVerifier.deploy();
-    await mockVerifier.waitForDeployment();
+    await accessNFT.connect(owner).setMinter(await payPerView.getAddress());
 
-    const ProofVerifier = await ethers.getContractFactory("ProofVerifier");
-    const proofVerifier = await ProofVerifier.deploy(
-      await mockVerifier.getAddress(),
-      await accessNFT.getAddress()
-    );
-    await proofVerifier.waitForDeployment();
-
-    await accessNFT.connect(owner).setPayPerView(await payPerView.getAddress());
-    await accessNFT.connect(owner).setProofVerifier(await proofVerifier.getAddress());
-
-    return { owner, viewer, other, accessNFT, payPerView, proofVerifier, mockVerifier };
+    return { owner, viewer, other, accessNFT, payPerView };
   }
 
-  it("accepts fixed payment, grants access, and consumes on verify", async function () {
-    const { viewer, payPerView, proofVerifier, mockVerifier } = await deployFixture();
+  it("accepts fixed payment, grants access, and consumes once", async function () {
+    const { viewer, payPerView, accessNFT } = await deployFixture();
     const videoId = 1n;
     const { ethers } = await network.connect();
     const price = ethers.parseEther("0.005");
 
-    const payTx = await payPerView.connect(viewer).payForVideo(videoId, { value: price });
+    const payTx = await payPerView.connect(viewer).pay(videoId, { value: price });
     await payTx.wait();
 
-    expect(await payPerView.hasAccess(viewer.address, videoId)).to.eq(true);
+    expect(await accessNFT.ownerOf(1n)).to.eq(viewer.address);
+    expect(await accessNFT.consumed(1n)).to.eq(false);
 
-    await mockVerifier.setMockResult(true, 0);
+    await (await accessNFT.connect(viewer).consumeAccess(1n)).wait();
 
-    const verifyTx = await proofVerifier.verifyAndConsume(
-      "0x1234",
-      videoId,
-      viewer.address
-    );
-    await verifyTx.wait();
-
-    expect(await payPerView.hasAccess(viewer.address, videoId)).to.eq(false);
+    expect(await accessNFT.consumed(1n)).to.eq(true);
   });
 
   it("rejects incorrect payment amount", async function () {
@@ -61,12 +43,10 @@ describe("Somnia PayPerView flow", function () {
 
     let reverted = false;
     try {
-      await payPerView
-        .connect(viewer)
-        .payForVideo(videoId, { value: ethers.parseEther("0.001") });
+      await payPerView.connect(viewer).pay(videoId, { value: ethers.parseEther("0.001") });
     } catch (error) {
       reverted = true;
-      expect(String(error)).to.contain("Incorrect STT amount");
+      expect(String(error)).to.contain("IncorrectPayment");
     }
 
     expect(reverted).to.eq(true);
@@ -78,11 +58,8 @@ describe("Somnia PayPerView flow", function () {
     const { ethers } = await network.connect();
     const price = ethers.parseEther("0.005");
 
-    await payPerView.connect(viewer).payForVideo(videoId, { value: price });
-
-    const tokenId = await accessNFT.tokenByViewerAndVideo(
-      ethers.keccak256(ethers.solidityPacked(["address", "uint256"], [viewer.address, videoId]))
-    );
+    await payPerView.connect(viewer).pay(videoId, { value: price });
+    const tokenId = 1n;
 
     let reverted = false;
     try {

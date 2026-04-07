@@ -39,7 +39,6 @@ function main() {
   env.set("NEXT_PUBLIC_SOMNIA_RPC_URL", env.get("NEXT_PUBLIC_SOMNIA_RPC_URL") || "https://dream-rpc.somnia.network/");
   env.set("NEXT_PUBLIC_PAYPERVIEW_ADDRESS", env.get("NEXT_PUBLIC_PAYPERVIEW_ADDRESS") || "");
   env.set("NEXT_PUBLIC_ACCESS_NFT_ADDRESS", env.get("NEXT_PUBLIC_ACCESS_NFT_ADDRESS") || "");
-  env.set("NEXT_PUBLIC_PROOF_VERIFIER_ADDRESS", env.get("NEXT_PUBLIC_PROOF_VERIFIER_ADDRESS") || "");
 
   fs.writeFileSync(envPath, stringifyEnv(env), "utf8");
 

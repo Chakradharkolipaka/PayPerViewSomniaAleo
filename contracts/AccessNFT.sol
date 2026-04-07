@@ -65,24 +65,20 @@ contract AccessNFT is ERC721, Ownable {
         emit AccessConsumed(msg.sender, tokenId, tokenVideo[tokenId]);
     }
 
-    /// @dev Disable all transfers — soulbound token
-    function transferFrom(address, address, uint256) public pure override {
-        revert NonTransferable();
-    }
+    /// @dev Allow only mint (from=0) and burn (to=0), block peer-to-peer transfers.
+    function _update(
+        address to,
+        uint256 tokenId,
+        address auth
+    ) internal override returns (address from) {
+        from = _ownerOf(tokenId);
 
-    /// @dev Disable all transfers — soulbound token
-    function safeTransferFrom(address, address, uint256) public pure override {
-        revert NonTransferable();
-    }
+        // Block transfer when both sender and receiver are non-zero.
+        if (from != address(0) && to != address(0)) {
+            revert NonTransferable();
+        }
 
-    /// @dev Disable all transfers — soulbound token
-    function safeTransferFrom(
-        address,
-        address,
-        uint256,
-        bytes memory
-    ) public pure override {
-        revert NonTransferable();
+        return super._update(to, tokenId, auth);
     }
 
     /// @dev Remove approval functionality

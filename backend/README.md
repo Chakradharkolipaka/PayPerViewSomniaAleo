@@ -1,22 +1,24 @@
 # Backend Services (Node.js)
 
-This backend is now an event monitor, not a YouTube/encryption orchestrator.
+Minimal backend for the PPV flow.
 
 ## Responsibilities
 
-1. Subscribe to `AccessPurchased` from `PayPerView.sol`
-2. Subscribe to `ViewAccessConsumed` from `ProofVerifier.sol`
-3. Print structured logs for operational visibility and debugging
+1. Verify `ownerOf(tokenId)` on `AccessNFT.sol`
+2. Ensure `consumed(tokenId) == false`
+3. Return `DECRYPTION_KEY_VIDEO_<id>` for allowed viewers
+4. Consume access by calling `consumeAccess(tokenId)`
 
 ## Environment Variables
 
 - `SOMNIA_RPC_URL`
-- `SOMNIA_WS_RPC_URL`
-- `NEXT_PUBLIC_PAYPERVIEW_ADDRESS`
-- `NEXT_PUBLIC_PROOF_VERIFIER_ADDRESS`
+- `BACKEND_PRIVATE_KEY`
+- `ACCESS_NFT_ADDRESS`
+- `DECRYPTION_KEY_VIDEO_1` (and more as needed)
+- `PORT` (optional)
+- `LOG_LEVEL` (optional, set to `debug` for verbose logs)
 
 ## Notes
 
 - No YouTube URL processing exists in backend.
-- No encrypted URL generation or signing exists in backend.
-- No private content keys are persisted.
+- No ProofVerifier dependency exists in backend.

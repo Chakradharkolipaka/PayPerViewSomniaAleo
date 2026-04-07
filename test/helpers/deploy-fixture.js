@@ -10,35 +10,21 @@ export async function deployFixture() {
   const [owner, viewer, other] = await ethers.getSigners();
 
   const AccessNFT = await ethers.getContractFactory("AccessNFT");
-  const accessNFT = await AccessNFT.deploy(owner.address);
+  const accessNFT = await AccessNFT.deploy();
   await accessNFT.waitForDeployment();
 
   const PayPerView = await ethers.getContractFactory("PayPerView");
-  const payPerView = await PayPerView.deploy(await accessNFT.getAddress(), owner.address);
+  const payPerView = await PayPerView.deploy(await accessNFT.getAddress());
   await payPerView.waitForDeployment();
 
-  const MockVerifier = await ethers.getContractFactory("MockAleoVerifier");
-  const mockVerifier = await MockVerifier.deploy();
-  await mockVerifier.waitForDeployment();
-
-  const ProofVerifier = await ethers.getContractFactory("ProofVerifier");
-  const proofVerifier = await ProofVerifier.deploy(
-    await mockVerifier.getAddress(),
-    await accessNFT.getAddress()
-  );
-  await proofVerifier.waitForDeployment();
-
-  await (await accessNFT.connect(owner).setPayPerView(await payPerView.getAddress())).wait();
-  await (await accessNFT.connect(owner).setProofVerifier(await proofVerifier.getAddress())).wait();
+  await (await accessNFT.connect(owner).setMinter(await payPerView.getAddress())).wait();
 
   return {
     owner,
     viewer,
     other,
-  ethers,
+    ethers,
     accessNFT,
     payPerView,
-    proofVerifier,
-    mockVerifier,
   };
 }

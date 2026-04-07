@@ -3,21 +3,17 @@ import { deployFixture } from "../helpers/deploy-fixture.js";
 import { expectConfirmed } from "../helpers/assertions.js";
 
 describe("Full Flow Integration", function () {
-  it("purchase -> verify -> consume", async function () {
-    const { owner, viewer, payPerView, proofVerifier, mockVerifier } = await deployFixture();
+  it("purchase -> consume", async function () {
+    const { viewer, payPerView, accessNFT } = await deployFixture();
     const videoId = 77n;
 
-    await expectConfirmed(
-      payPerView.connect(viewer).payForVideo(videoId, { value: 5000000000000000n })
-    );
+    await expectConfirmed(payPerView.connect(viewer).pay(videoId, { value: 5000000000000000n }));
 
-    expect(await payPerView.hasAccess(viewer.address, videoId)).to.eq(true);
+    expect(await accessNFT.ownerOf(1n)).to.eq(viewer.address);
+    expect(await accessNFT.consumed(1n)).to.eq(false);
 
-    await mockVerifier.setMockResult(true, 0);
-    await expectConfirmed(
-      proofVerifier.connect(owner).verifyAndConsume("0x1234", videoId, viewer.address)
-    );
+    await expectConfirmed(accessNFT.connect(viewer).consumeAccess(1n));
 
-    expect(await payPerView.hasAccess(viewer.address, videoId)).to.eq(false);
+    expect(await accessNFT.consumed(1n)).to.eq(true);
   });
 });

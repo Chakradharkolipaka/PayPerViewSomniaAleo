@@ -10,8 +10,11 @@ export const payPerViewAddress = process.env.NEXT_PUBLIC_PAYPERVIEW_ADDRESS as `
 export const accessNftAddress = process.env.NEXT_PUBLIC_ACCESS_NFT_ADDRESS as `0x${string}` | undefined;
 
 // Network configuration
-export const SOMNIA_CHAIN_ID = 102;
-export const SOMNIA_RPC = process.env.NEXT_PUBLIC_RPC_URL || "https://somnia-testnet-rpc.allthatnode.com:8545";
+export const SOMNIA_CHAIN_ID = 50312;
+export const SOMNIA_RPC =
+  process.env.NEXT_PUBLIC_SOMNIA_RPC_URL ||
+  process.env.NEXT_PUBLIC_RPC_URL ||
+  "https://dream-rpc.somnia.network/";
 export const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:3001";
 
 // Constants

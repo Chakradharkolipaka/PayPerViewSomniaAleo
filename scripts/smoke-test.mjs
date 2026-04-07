@@ -9,44 +9,25 @@ async function main() {
   const [owner, viewer] = await ethers.getSigners();
 
   const AccessNFT = await ethers.getContractFactory("AccessNFT");
-  const accessNFT = await AccessNFT.deploy(owner.address);
+  const accessNFT = await AccessNFT.deploy();
   await accessNFT.waitForDeployment();
 
   const PayPerView = await ethers.getContractFactory("PayPerView");
-  const payPerView = await PayPerView.deploy(await accessNFT.getAddress(), owner.address);
+  const payPerView = await PayPerView.deploy(await accessNFT.getAddress());
   await payPerView.waitForDeployment();
 
-  const MockVerifier = await ethers.getContractFactory("MockAleoVerifier");
-  const mockVerifier = await MockVerifier.deploy();
-  await mockVerifier.waitForDeployment();
-
-  const ProofVerifier = await ethers.getContractFactory("ProofVerifier");
-  const proofVerifier = await ProofVerifier.deploy(
-    await mockVerifier.getAddress(),
-    await accessNFT.getAddress()
-  );
-  await proofVerifier.waitForDeployment();
-
-  await (await accessNFT.setPayPerView(await payPerView.getAddress())).wait();
-  await (await accessNFT.setProofVerifier(await proofVerifier.getAddress())).wait();
+  await (await accessNFT.setMinter(await payPerView.getAddress())).wait();
 
   const videoId = 11n;
   const price = ethers.parseEther("0.005");
 
-  await (await payPerView.connect(viewer).payForVideo(videoId, { value: price })).wait();
+  await (await payPerView.connect(viewer).pay(videoId, { value: price })).wait();
+  assert((await accessNFT.ownerOf(1n)) === viewer.address, "Expected viewer to own tokenId=1");
 
-  const activeBeforeConsume = await payPerView.hasAccess(viewer.address, videoId);
-  assert(activeBeforeConsume, "Expected active access after payment");
+  await (await accessNFT.connect(viewer).consumeAccess(1n)).wait();
+  assert(await accessNFT.consumed(1n), "Expected token to be consumed");
 
-  await (await mockVerifier.setMockResult(true, 0)).wait();
-
-  const verifyTx = await proofVerifier.verifyAndConsume("0x1234", videoId, viewer.address);
-  await verifyTx.wait();
-
-  const activeAfterConsume = await payPerView.hasAccess(viewer.address, videoId);
-  assert(!activeAfterConsume, "Expected access to be consumed after successful proof verification");
-
-  console.log("Smoke test passed: payment -> verify -> consume flow is valid.");
+  console.log("Smoke test passed: payment -> mint -> consume flow is valid.");
 }
 
 main().catch((err) => {

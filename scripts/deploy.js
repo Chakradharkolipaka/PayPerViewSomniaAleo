@@ -7,7 +7,6 @@ dotenv.config({ path: ".env.local" });
 const ARTIFACTS = {
   accessNFT: "./artifacts/contracts/AccessNFT.sol/AccessNFT.json",
   payPerView: "./artifacts/contracts/PayPerView.sol/PayPerView.json",
-  proofVerifier: "./artifacts/contracts/ProofVerifier.sol/ProofVerifier.json",
 };
 
 function loadArtifact(path) {
@@ -18,14 +17,17 @@ function loadArtifact(path) {
 }
 
 async function main() {
-  const rpcUrl = process.env.SOMNIA_RPC_URL || "https://dream-rpc.somnia.network/";
-  const privateKey = process.env.PRIVATE_KEY;
-  const verulinkVerifierAddress = process.env.VERULINK_ALEO_VERIFIER_ADDRESS;
+  const rpcUrl =
+    process.env.SOMNIA_RPC_URL ||
+    process.env.NEXT_PUBLIC_SOMNIA_RPC_URL ||
+    "https://dream-rpc.somnia.network/";
+  const rawPrivateKey = process.env.PRIVATE_KEY;
 
-  if (!privateKey) throw new Error("Missing PRIVATE_KEY in .env.local");
-  if (!verulinkVerifierAddress) {
-    throw new Error("Missing VERULINK_ALEO_VERIFIER_ADDRESS in .env.local");
+  if (!rawPrivateKey) {
+    throw new Error("Missing PRIVATE_KEY in .env.local");
   }
+
+  const privateKey = rawPrivateKey.startsWith("0x") ? rawPrivateKey : `0x${rawPrivateKey}`;
 
   const provider = new ethers.JsonRpcProvider(rpcUrl);
   const wallet = new ethers.Wallet(privateKey, provider);
@@ -35,37 +37,29 @@ async function main() {
 
   const accessArtifact = loadArtifact(ARTIFACTS.accessNFT);
   const ppvArtifact = loadArtifact(ARTIFACTS.payPerView);
-  const verifierArtifact = loadArtifact(ARTIFACTS.proofVerifier);
 
   const accessFactory = new ethers.ContractFactory(accessArtifact.abi, accessArtifact.bytecode, wallet);
-  const accessNFT = await accessFactory.deploy(wallet.address);
+  const accessNFT = await accessFactory.deploy();
   await accessNFT.waitForDeployment();
   const accessAddress = await accessNFT.getAddress();
   console.log(`AccessNFT deployed: ${accessAddress}`);
 
   const ppvFactory = new ethers.ContractFactory(ppvArtifact.abi, ppvArtifact.bytecode, wallet);
-  const payPerView = await ppvFactory.deploy(accessAddress, wallet.address);
+  const payPerView = await ppvFactory.deploy(accessAddress);
   await payPerView.waitForDeployment();
   const ppvAddress = await payPerView.getAddress();
   console.log(`PayPerView deployed: ${ppvAddress}`);
 
-  const verifierFactory = new ethers.ContractFactory(verifierArtifact.abi, verifierArtifact.bytecode, wallet);
-  const proofVerifier = await verifierFactory.deploy(verulinkVerifierAddress, accessAddress);
-  await proofVerifier.waitForDeployment();
-  const proofAddress = await proofVerifier.getAddress();
-  console.log(`ProofVerifier deployed: ${proofAddress}`);
-
-  const setMinterTx = await accessNFT.setPayPerView(ppvAddress);
+  const setMinterTx = await accessNFT.setMinter(ppvAddress);
   await setMinterTx.wait();
 
-  const setBurnerTx = await accessNFT.setProofVerifier(proofAddress);
-  await setBurnerTx.wait();
-
   console.log("\nDeployment complete:");
+  console.log(`SOMNIA_RPC_URL=${rpcUrl}`);
+  console.log(`NEXT_PUBLIC_SOMNIA_RPC_URL=${rpcUrl}`);
   console.log(`NEXT_PUBLIC_ACCESS_NFT_ADDRESS=${accessAddress}`);
   console.log(`NEXT_PUBLIC_PAYPERVIEW_ADDRESS=${ppvAddress}`);
-  console.log(`NEXT_PUBLIC_PROOF_VERIFIER_ADDRESS=${proofAddress}`);
-  console.log(`NEXT_PUBLIC_SOMNIA_RPC_URL=${rpcUrl}`);
+  console.log(`ACCESS_NFT_ADDRESS=${accessAddress}`);
+  console.log(`BACKEND_PRIVATE_KEY=<set this to backend signer private key>`);
 }
 
 main().catch((error) => {

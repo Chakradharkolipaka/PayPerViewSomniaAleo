@@ -1,37 +1,13 @@
 {
   "_format": "hh3-artifact-1",
-  "contractName": "IAccessNFTMinter",
+  "contractName": "IAccessNFT",
   "sourceName": "contracts/PayPerView.sol",
   "abi": [
     {
       "inputs": [
         {
           "internalType": "address",
-          "name": "viewer",
-          "type": "address"
-        },
-        {
-          "internalType": "uint256",
-          "name": "videoId",
-          "type": "uint256"
-        }
-      ],
-      "name": "hasActiveAccess",
-      "outputs": [
-        {
-          "internalType": "bool",
-          "name": "",
-          "type": "bool"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "address",
-          "name": "viewer",
+          "name": "to",
           "type": "address"
         },
         {
@@ -44,7 +20,7 @@
       "outputs": [
         {
           "internalType": "uint256",
-          "name": "tokenId",
+          "name": "",
           "type": "uint256"
         }
       ],
@@ -58,5 +34,5 @@
   "deployedLinkReferences": {},
   "immutableReferences": {},
   "inputSourceName": "project/contracts/PayPerView.sol",
-  "buildInfoId": "solc-0_8_24-5205c465e4578ca58f4ea9cb357eb2061c8d2516"
+  "buildInfoId": "solc-0_8_24-e17d0153754dfdfb6830aeca6d65f5e6568c4d9e"
 }

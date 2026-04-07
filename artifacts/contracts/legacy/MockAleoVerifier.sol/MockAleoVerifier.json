@@ -1,0 +1,92 @@
+{
+  "_format": "hh3-artifact-1",
+  "contractName": "MockAleoVerifier",
+  "sourceName": "contracts/legacy/MockAleoVerifier.sol",
+  "abi": [
+    {
+      "inputs": [],
+      "name": "expiry",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "isValid",
+      "outputs": [
+        {
+          "internalType": "bool",
+          "name": "",
+          "type": "bool"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bool",
+          "name": "_isValid",
+          "type": "bool"
+        },
+        {
+          "internalType": "uint256",
+          "name": "_expiry",
+          "type": "uint256"
+        }
+      ],
+      "name": "setMockResult",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes",
+          "name": "",
+          "type": "bytes"
+        },
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        },
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "name": "verify",
+      "outputs": [
+        {
+          "internalType": "bool",
+          "name": "",
+          "type": "bool"
+        },
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    }
+  ],
+  "bytecode": "0x608060405234801561000f575f80fd5b506101d88061001d5f395ff3fe608060405234801561000f575f80fd5b506004361061004a575f3560e01c80635603c4e11461004e578063aee150c714610074578063bb5d40eb146100b2578063e184c9be146100ce575b5f80fd5b61007261005c3660046100e5565b5f805460ff191692151592909217909155600155565b005b610096610082366004610113565b5f5460015460ff9091169094509492505050565b6040805192151583526020830191909152015b60405180910390f35b5f546100be9060ff1681565b60405190151581526020016100a9565b6100d760015481565b6040519081526020016100a9565b5f80604083850312156100f6575f80fd5b82358015158114610105575f80fd5b946020939093013593505050565b5f805f8060608587031215610126575f80fd5b843567ffffffffffffffff8082111561013d575f80fd5b818701915087601f830112610150575f80fd5b81358181111561015e575f80fd5b88602082850101111561016f575f80fd5b60209283019650945050850135915060408501356001600160a01b0381168114610197575f80fd5b93969295509093505056fea2646970667358221220444a325ea9e4ad7d3a17e1a6d67bc3c01c13645f0d86b6ab907a86644993d3b864736f6c63430008180033",
+  "deployedBytecode": "0x608060405234801561000f575f80fd5b506004361061004a575f3560e01c80635603c4e11461004e578063aee150c714610074578063bb5d40eb146100b2578063e184c9be146100ce575b5f80fd5b61007261005c3660046100e5565b5f805460ff191692151592909217909155600155565b005b610096610082366004610113565b5f5460015460ff9091169094509492505050565b6040805192151583526020830191909152015b60405180910390f35b5f546100be9060ff1681565b60405190151581526020016100a9565b6100d760015481565b6040519081526020016100a9565b5f80604083850312156100f6575f80fd5b82358015158114610105575f80fd5b946020939093013593505050565b5f805f8060608587031215610126575f80fd5b843567ffffffffffffffff8082111561013d575f80fd5b818701915087601f830112610150575f80fd5b81358181111561015e575f80fd5b88602082850101111561016f575f80fd5b60209283019650945050850135915060408501356001600160a01b0381168114610197575f80fd5b93969295509093505056fea2646970667358221220444a325ea9e4ad7d3a17e1a6d67bc3c01c13645f0d86b6ab907a86644993d3b864736f6c63430008180033",
+  "linkReferences": {},
+  "deployedLinkReferences": {},
+  "immutableReferences": {},
+  "inputSourceName": "project/contracts/legacy/MockAleoVerifier.sol",
+  "buildInfoId": "solc-0_8_24-e17d0153754dfdfb6830aeca6d65f5e6568c4d9e"
+}

@@ -7,14 +7,8 @@ describe("AccessNFT Unit", function () {
     const { viewer, other, accessNFT, payPerView, ethers } = await deployFixture();
     const videoId = 10n;
 
-    await expectConfirmed(
-      payPerView.connect(viewer).payForVideo(videoId, { value: 5000000000000000n })
-    );
-
-    const key = ethers.keccak256(
-      ethers.solidityPacked(["address", "uint256"], [viewer.address, videoId])
-    );
-    const tokenId = await accessNFT.tokenByViewerAndVideo(key);
+    await expectConfirmed(payPerView.connect(viewer).pay(videoId, { value: 5000000000000000n }));
+    const tokenId = 1n;
 
     await expectRevert(
       accessNFT.connect(viewer).transferFrom(viewer.address, other.address, tokenId),
@@ -22,28 +16,19 @@ describe("AccessNFT Unit", function () {
     );
   });
 
-  it("allows only burner to consume access", async function () {
-    const { owner, viewer, accessNFT, payPerView, proofVerifier, ethers } = await deployFixture();
+  it("allows only token owner or contract owner to consume access", async function () {
+    const { owner, viewer, other, accessNFT, payPerView } = await deployFixture();
     const videoId = 11n;
 
-    await expectConfirmed(
-      payPerView.connect(viewer).payForVideo(videoId, { value: 5000000000000000n })
-    );
+    await expectConfirmed(payPerView.connect(viewer).pay(videoId, { value: 5000000000000000n }));
+    const tokenId = 1n;
 
     await expectRevert(
-      accessNFT.connect(owner).consumeAccess(viewer.address, videoId),
-      "NotAuthorizedBurner"
+      accessNFT.connect(other).consumeAccess(tokenId),
+      "NotTokenOwner"
     );
 
-    const burner = await proofVerifier.getAddress();
-    await ethers.provider.send("hardhat_impersonateAccount", [burner]);
-    await ethers.provider.send("hardhat_setBalance", [burner, "0x3635C9ADC5DEA00000"]);
-    const burnerSigner = await ethers.getSigner(burner);
-
-    await expectConfirmed(accessNFT.connect(burnerSigner).consumeAccess(viewer.address, videoId));
-
-    await ethers.provider.send("hardhat_stopImpersonatingAccount", [burner]);
-
-    expect(await accessNFT.hasActiveAccess(viewer.address, videoId)).to.eq(false);
+    await expectConfirmed(accessNFT.connect(viewer).consumeAccess(tokenId));
+    expect(await accessNFT.consumed(tokenId)).to.eq(true);
   });
 });
