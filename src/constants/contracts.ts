@@ -3,7 +3,7 @@
  * Contract addresses and ABIs for the minimal PPV architecture.
  * 
  * ProofVerifier and MockAleoVerifier are no longer used in production.
- * Verification now happens entirely in the backend via /api/verify-and-serve.
+ * Verification now happens through same-origin Next.js route handlers.
  */
 
 export const payPerViewAddress = process.env.NEXT_PUBLIC_PAYPERVIEW_ADDRESS as `0x${string}` | undefined;
@@ -15,7 +15,6 @@ export const SOMNIA_RPC =
   process.env.NEXT_PUBLIC_SOMNIA_RPC_URL ||
   process.env.NEXT_PUBLIC_RPC_URL ||
   "https://dream-rpc.somnia.network/";
-export const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:3001";
 
 // Constants
 export const VIDEO_PRICE_STT = "0.005";

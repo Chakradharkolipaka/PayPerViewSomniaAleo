@@ -20,20 +20,58 @@ export const PPV_ERRORS = {
 
 export type PPVErrorKey = keyof typeof PPV_ERRORS;
 
+export interface PPVErrorClassification {
+  message: string;
+  detailed: string;
+  code: PPVErrorKey;
+}
+
 /**
  * classifyError
- * Converts a raw error into a user-facing message.
- * Returns a string from PPV_ERRORS or a generic fallback.
+ * Converts a raw error into a user-facing message plus a detailed diagnostic string.
  */
-export function classifyError(err: unknown): string {
+export function classifyError(err: unknown): PPVErrorClassification {
   const msg = (err as Error)?.message?.toLowerCase() ?? "";
-  
-  if (msg.includes("user rejected")) return PPV_ERRORS.TX_REJECTED;
-  if (msg.includes("insufficient")) return PPV_ERRORS.INSUFFICIENT_BALANCE;
-  if (msg.includes("network")) return PPV_ERRORS.WRONG_NETWORK;
-  if (msg.includes("wallet")) return PPV_ERRORS.WALLET_NOT_FOUND;
-  if (msg.includes("aleo")) return PPV_ERRORS.ALEO_PROOF_FAILED;
-  if (msg.includes("decrypt")) return PPV_ERRORS.DECRYPTION_FAILED;
-  
-  return PPV_ERRORS.TX_FAILED;
+
+  if (msg.includes("user rejected")) {
+    return makeClassification("TX_REJECTED", err);
+  }
+
+  if (msg.includes("insufficient")) {
+    return makeClassification("INSUFFICIENT_BALANCE", err);
+  }
+
+  if (msg.includes("network")) {
+    return makeClassification("WRONG_NETWORK", err);
+  }
+
+  if (msg.includes("wallet")) {
+    return makeClassification("WALLET_NOT_FOUND", err);
+  }
+
+  if (msg.includes("aleo")) {
+    return makeClassification("ALEO_PROOF_FAILED", err);
+  }
+
+  if (msg.includes("decrypt")) {
+    return makeClassification("DECRYPTION_FAILED", err);
+  }
+
+  return {
+    code: "TX_FAILED",
+    message: PPV_ERRORS.TX_FAILED,
+    detailed: isErrorLike(err) && err.message ? err.message : PPV_ERRORS.TX_FAILED,
+  };
+}
+
+function makeClassification(code: PPVErrorKey, err: unknown): PPVErrorClassification {
+  return {
+    code,
+    message: PPV_ERRORS[code],
+    detailed: isErrorLike(err) && err.message ? err.message : PPV_ERRORS[code],
+  };
+}
+
+function isErrorLike(value: unknown): value is Error {
+  return typeof value === "object" && value !== null && "message" in value;
 }

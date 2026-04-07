@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import React, { useEffect, useMemo, useState } from "react";
 import {
   useAccount,
@@ -14,7 +15,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { PopupBanner } from "@/components/PopupBanner";
 import { DebugPanel } from "@/components/DebugPanel";
 import { useWalletState } from "@/context/wallet-state";
-import { getAddress } from "viem";
 import {
   SOMNIA_CHAIN_ID,
   VIDEO_PRICE_WEI,
@@ -22,12 +22,10 @@ import {
   accessNftAddress,
   payPerViewAbi,
   accessNftAbi,
-  BACKEND_URL,
 } from "@/constants";
 import { grantViewToken, consumeViewToken } from "@/lib/aleo-wallet";
 import { decryptAndPlay } from "@/lib/decrypt";
-import { PPV_ERRORS, classifyError } from "@/lib/ppv-errors";
-import { useToast } from "@/components/ui/use-toast";
+import { classifyError } from "@/lib/ppv-errors";
 
 type ViewStep =
   | "idle"
@@ -48,12 +46,12 @@ const VIDEOS: Record<number, { title: string; durationSeconds: number; coverUrl:
   1: {
     title: "Getting Started with Aleo",
     durationSeconds: 600,
-    coverUrl: "https://via.placeholder.com/640x360?text=Video+1",
+    coverUrl: "/thumbnails/1.jpg",
   },
   2: {
     title: "Advanced Aleo Proofs",
     durationSeconds: 1200,
-    coverUrl: "https://via.placeholder.com/640x360?text=Video+2",
+    coverUrl: "/thumbnails/2.jpg",
   },
 };
 
@@ -64,7 +62,6 @@ export default function VideoWatchPage({ params }: { params: { videoId: string }
   // Somnia wallet (via wagmi)
   const { address: somniaAddress, isConnected: somniaConnected, chainId } = useAccount();
   const { switchChainAsync } = useSwitchChain();
-  const { toast } = useToast();
 
   // Aleo + Somnia state management
   const {
@@ -221,7 +218,7 @@ export default function VideoWatchPage({ params }: { params: { videoId: string }
       // For now, assume tokenId 1
       setTokenId("1");
     }
-  }, [payTxData, tokenId]);
+  }, [payTxData, tokenId, addEvent]);
 
   /**
    * Step 2: Grant View Token (Aleo)
@@ -264,10 +261,10 @@ export default function VideoWatchPage({ params }: { params: { videoId: string }
 
     try {
       setViewStep("verifying");
-      setStepMessage("Verifying with backend...");
-      addEvent("Calling backend verify-and-serve");
+      setStepMessage("Verifying access on server...");
+      addEvent("Calling /api/verify-and-serve");
 
-      const res = await fetch(`${BACKEND_URL}/api/verify-and-serve`, {
+      const res = await fetch("/api/verify-and-serve", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -278,7 +275,8 @@ export default function VideoWatchPage({ params }: { params: { videoId: string }
       });
 
       if (!res.ok) {
-        throw new Error(`Backend error: ${res.status} ${res.statusText}`);
+        const payload = (await res.json().catch(() => null)) as { message?: string } | null;
+        throw new Error(payload?.message || `Backend error: ${res.status} ${res.statusText}`);
       }
 
       const { decryptionKey, videoId: serverVideoId } = (await res.json()) as {
@@ -286,7 +284,7 @@ export default function VideoWatchPage({ params }: { params: { videoId: string }
         videoId: string;
       };
 
-      addEvent(`Backend served decryption key for video ${serverVideoId}`);
+      addEvent(`Server served decryption key for video ${serverVideoId}`);
 
       // Step 4: Decrypt
       await handleDecrypt(decryptionKey);
@@ -355,7 +353,13 @@ export default function VideoWatchPage({ params }: { params: { videoId: string }
         </div>
       ) : (
         <div className="mb-6 rounded-lg bg-gray-200 h-64 flex items-center justify-center">
-          <img src={video.coverUrl} alt={video.title} className="w-full h-full object-cover" />
+          <Image
+            src={video.coverUrl}
+            alt={video.title}
+            width={640}
+            height={360}
+            className="w-full h-full object-cover"
+          />
         </div>
       )}
 

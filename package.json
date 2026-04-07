@@ -10,11 +10,10 @@
     "lint": "next lint",
     "network:select": "node scripts/select-network.mjs",
     "contracts:compile": "npx hardhat compile",
-  "contracts:test": "npm run contracts:test:unit && npm run contracts:test:integration",
-  "contracts:test:unit": "npx hardhat test test/unit/*.test.js",
-  "contracts:test:integration": "npx hardhat test test/integration/*.test.js",
-    "contracts:deploy:somnia": "node scripts/deploy.js",
-    "backend:start": "node backend/index.mjs"
+    "contracts:test": "npm run contracts:test:unit && npm run contracts:test:integration",
+    "contracts:test:unit": "npx hardhat test test/unit/*.test.js",
+    "contracts:test:integration": "npx hardhat test test/integration/*.test.js",
+    "contracts:deploy:somnia": "node scripts/deploy.js"
   },
   "dependencies": {
     "@aleohq/sdk": "^0.6.9",

@@ -6,6 +6,7 @@ This app implements a fixed-price, single-view architecture:
 - Payment mints one non-transferable single-use access NFT
 - Aleo generates privacy proof + per-view key handoff
 - Proof verification on Somnia consumes (burns) the NFT
+- Next.js route handlers serve verification and video metadata on the same deployment
 - Frontend loads encrypted static asset metadata (no YouTube URLs)
 
 ## Core Design
@@ -60,7 +61,6 @@ This app implements a fixed-price, single-view architecture:
 - `NEXT_PUBLIC_PAYPERVIEW_ADDRESS`
 - `NEXT_PUBLIC_ACCESS_NFT_ADDRESS`
 - `SOMNIA_RPC_URL`
-- `PRIVATE_KEY`
 - `BACKEND_PRIVATE_KEY`
 - `ACCESS_NFT_ADDRESS`
 - `ALEO_PROGRAM_ID`
@@ -75,4 +75,3 @@ This app implements a fixed-price, single-view architecture:
 - `npm run contracts:test`
 - `npm run contracts:deploy:somnia`
 - `npm run dev`
-- `npm run backend:start`

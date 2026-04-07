@@ -2,7 +2,7 @@
 
 ## Overview
 
-This guide walks through deploying the PayPerView (PPV) system across Somnia, Aleo, and the backend verifier service. All infrastructure has been refactored (Phase 0–6) and is ready for production deployment.
+This guide walks through deploying the PayPerView (PPV) system across Somnia, Aleo, and Next.js route handlers. All infrastructure has been refactored (Phase 0–6) and is ready for production deployment.
 
 ## Architecture Recap
 
@@ -12,11 +12,11 @@ User Browser
   ↓ 2. [Watch Page] Sets up 4-step state machine (idle → connecting → paying → ... → playing)
   ↓ 3. [Pay Action] Calls PayPerView.pay(videoId) via wagmi, receives AccessNFT tokenId
   ↓ 4. [Aleo Proof] Calls aleo_appName.grantViewToken(viewer, video_id, token_id)
-  ↓ 5. [Backend Query] POST /api/verify-and-serve { tokenId, viewer, aleoRecord }
-  ↓ 6. [Backend Verifies] Checks ownerOf(tokenId) === viewer, not yet consumed
-  ↓ 7. [Decryption Key] Backend returns hex-encoded AES-256 key
+  ↓ 5. [Route Query] POST /api/verify-and-serve { tokenId, viewer, aleoRecord }
+  ↓ 6. [Route Verifies] Checks ownerOf(tokenId) === viewer, not yet consumed
+  ↓ 7. [Decryption Key] Route returns hex-encoded AES-256 key
   ↓ 8. [Client Decrypt] Frontend calls decryptAndPlay(videoId, hexKey)
-  ↓ 9. [Consume] Frontend calls consumeViewToken(), backend burns NFT
+  ↓ 9. [Consume] Frontend calls consumeViewToken(), route burns NFT
   ↓ 10. [Play] <video src={decryptedBlobUrl}> streams to user
 ```
 
@@ -131,9 +131,9 @@ node scripts/encrypt-video.mjs my-video.mp4 1
 #   [encrypt-video] Read 123456789 bytes from my-video.mp4
 #   [encrypt-video] Wrote encrypted asset: public/encrypted/video_1.enc (123456890 bytes)
 #   a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6... (hex key)
-#   [encrypt-video] Key for backend env: DECRYPTION_KEY_VIDEO_1=a1b2c3d4e5f6...
+#   [encrypt-video] Key for server env: DECRYPTION_KEY_VIDEO_1=a1b2c3d4e5f6...
 
-# C.2 Store the hex key in backend .env:
+# C.2 Store the hex key in app/server env:
 #   DECRYPTION_KEY_VIDEO_1=a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6...
 
 # C.3 Repeat for all videos (2, 3, 4, ...)
@@ -159,68 +159,56 @@ ls -lah public/encrypted/
 #     --cache-control "max-age=31536000,immutable"
 ```
 
-### Phase D: Backend Server Deployment
+### Phase D: Server Route Handlers
 
 #### Prerequisites
 - Node.js v18+
-- Backend code in `backend/index.mjs` (Phase 3)
+- Next.js API routes in `src/app/api/`
 - All DECRYPTION_KEY_VIDEO_* env vars set
-
-#### Step 1: Install Dependencies
-
-```bash
-cd backend
-npm install express cors dotenv ethers
-```
 
 #### Step 2: Set Environment Variables
 
 ```bash
-# D.1 Create backend/.env with:
+# D.1 Use your app-level .env.local or deployment env settings:
 export SOMNIA_RPC_URL=https://somnia-testnet-rpc.allthatnode.com:8545
 export ACCESS_NFT_ADDRESS=0x<ADDRESS_A>
 export DECRYPTION_KEY_VIDEO_1=a1b2c3d4e5f6...
 export DECRYPTION_KEY_VIDEO_2=f6e5d4c3b2a1...
 # ... (repeat for all videos)
 
-# D.2 Backend listens on default port 3001 (check backend/index.mjs for PORT env var adjustment)
+# D.2 Next.js route handlers run inside the main app deployment.
 ```
 
-#### Step 3: Start Backend Server
+#### Step 3: Run the App Locally
 
 ```bash
 # D.3 Local development:
-node backend/index.mjs
+npm run dev
 
 # Output:
-#   Backend running on port 3001
-#   Listening for POST /api/verify-and-serve and GET /api/video-meta/:id
+#   Next.js app running on port 3000
+#   Listening for POST /api/verify-and-serve and GET /api/video-meta/[id]
 
-# D.4 Production (e.g., Docker, PM2, or cloud platform):
-# Use PM2:
-#   npm install -g pm2
-#   pm2 start backend/index.mjs --name "ppv-backend"
-#   pm2 save
-#   pm2 startup
+# D.4 Production:
+# Deploy the Next.js app to Vercel (or your preferred host) with the same env vars.
 ```
 
-#### Step 4: Verify Backend Endpoints
+#### Step 4: Verify Route Endpoints
 
 ```bash
-# D.5 Test /api/video-meta/:id endpoint:
-curl http://localhost:3001/api/video-meta/1
+# D.5 Test /api/video-meta/[id] endpoint:
+curl http://localhost:3000/api/video-meta/1
 
 # Expected response:
 #   {
-#     "id": "1",
-#     "title": "Building with Aleo",
-#     "durationSeconds": 600,
-#     "coverUrl": "https://...",
-#     "videoUrl": "/encrypted/video_1.enc"
+#     "videoId": 1,
+#     "title": "Introduction to Zero-Knowledge Proofs",
+#     "thumbnail": "/thumbnails/1.jpg",
+#     "priceSTT": "0.005"
 #   }
 
 # D.6 Test /api/verify-and-serve endpoint (after purchasing an NFT):
-curl -X POST http://localhost:3001/api/verify-and-serve \
+curl -X POST http://localhost:3000/api/verify-and-serve \
   -H "Content-Type: application/json" \
   -d '{
     "tokenId": "42",
@@ -230,7 +218,7 @@ curl -X POST http://localhost:3001/api/verify-and-serve \
 
 # Expected response:
 #   {
-#     "status": "success",
+#     "status": "consumed",
 #     "decryptionKey": "a1b2c3d4e5f6...",
 #     "videoId": "1"
 #   }
@@ -240,7 +228,7 @@ curl -X POST http://localhost:3001/api/verify-and-serve \
 
 #### Prerequisites
 - All NEXT_PUBLIC_* env vars filled in
-- Backend URL set in NEXT_PUBLIC_BACKEND_URL
+- Server route-handler env vars set: `SOMNIA_RPC_URL`, `BACKEND_PRIVATE_KEY`, `ACCESS_NFT_ADDRESS`, `DECRYPTION_KEY_VIDEO_*`
 - Build succeeds without errors
 
 #### Step 1: Lint for YouTube URLs
@@ -280,8 +268,10 @@ grep -r "youtube\|youtu\.be\|youtube\.com" .next/ public/ --include="*.js" --inc
 # NEXT_PUBLIC_ACCESS_NFT_ADDRESS=0x<ADDRESS_A>
 # NEXT_PUBLIC_PAYPERVIEW_ADDRESS=0x<ADDRESS_B>
 # NEXT_PUBLIC_ALEO_PROGRAM_ID=avideoac8qw9v6...
-# NEXT_PUBLIC_BACKEND_URL=https://backend.example.com
 # NEXT_PUBLIC_DEBUG=false
+# SOMNIA_RPC_URL=https://somnia-testnet-rpc.allthatnode.com:8545
+# BACKEND_PRIVATE_KEY=0x<BACKEND_KEY>
+# ACCESS_NFT_ADDRESS=0x<ADDRESS_A>
 
 # E.5 Deploy:
 vercel deploy --prod
@@ -313,8 +303,8 @@ vercel deploy --prod
 # 4b. Aleo Studio returns ViewToken proof
 # Expected: ViewStep → "consuming"
 
-# F.5 Backend call: POST /api/verify-and-serve
-# Expected: Backend checks NFT, serves key, marks as consumed
+# F.5 Route call: POST /api/verify-and-serve
+# Expected: Route checks NFT, serves key, marks as consumed
 # Expected: ViewStep → "verifying" → "playing"
 
 # F.6 decryptAndPlay(videoId, hexKey) called
@@ -342,7 +332,7 @@ vercel deploy --prod
 **Already Watched (NFT Already Consumed)**
 - User already purchased and watched video 1
 - User tries to purchase video 1 again with same wallet
-- Expected: Backend rejects (consumed flag set)
+- Expected: Route handler rejects (consumed flag set)
 - Expected: PopupBanner error "You've already accessed this video"
 - Expected: ViewStep → "error"
 
@@ -354,7 +344,7 @@ vercel deploy --prod
 - Expected: ViewStep → "error"
 
 **Decryption Fails**
-- Backend key is corrupted or wrong
+- Server decryption key is corrupted or wrong
 - decryptAndPlay() called with bad key
 - Expected: Web Crypto API throws
 - Expected: PopupBanner error "Decryption failed — the key or asset may be corrupted. Contact support."
@@ -365,11 +355,10 @@ vercel deploy --prod
 #### Logs & Alerts
 
 ```bash
-# G.1 Monitor backend logs for errors:
-pm2 logs ppv-backend
+# G.1 Monitor route logs for errors (Vercel Functions or app host logs)
 
 # G.2 Set up alerting for:
-#     - Backend 5xx errors
+#     - Route 5xx errors
 #     - Aleo proof generation failures
 #     - NFT burn failures
 #     - Zero decryption key lookups (bad videoId from frontend)
@@ -415,13 +404,13 @@ pm2 logs ppv-backend
 - [ ] **Encrypted Content**
   - [ ] All videos encrypted via scripts/encrypt-video.mjs
   - [ ] Encrypted files deployed to CDN with correct CORS
-  - [ ] DECRYPTION_KEY_VIDEO_* env vars set in backend
+  - [ ] DECRYPTION_KEY_VIDEO_* env vars set in server environment
 
-- [ ] **Backend**
-  - [ ] Backend server running and verified
+- [ ] **Server Routes**
+  - [ ] Next.js route handlers running and verified
   - [ ] /api/verify-and-serve endpoint working
-  - [ ] /api/video-meta/:id endpoint returning correct metadata
-  - [ ] Verify-and-serve burns NFTs after serving key (fireAndForgetConsumeAccess)
+  - [ ] /api/video-meta/[id] endpoint returning correct metadata
+  - [ ] Verify-and-serve burns NFTs after serving key
 
 - [ ] **Frontend**
   - [ ] Build succeeds without errors
@@ -432,22 +421,21 @@ pm2 logs ppv-backend
   - [ ] Full end-to-end test passes (pay → mint → prove → decrypt → play)
 
 - [ ] **Monitoring**
-  - [ ] Logs configured on backend
+  - [ ] Logs configured on app route handlers
   - [ ] Error alerts set up
   - [ ] Block explorers and Aleo Studio accessible
 
 ### Launch Day
 
 1. **Final Testnet Run**: Complete Phase F end-to-end test scenario
-2. **Deploy Backend**: Start backend service with production keys
-3. **Deploy Frontend**: Vercel deploy --prod with all NEXT_PUBLIC_* vars set
-4. **Smoke Test**: First 5 users complete full purchase + playback flow
-5. **Monitor**: Watch logs for 24 hours, respond to any errors
+2. **Deploy App**: Vercel deploy --prod with all env vars set
+3. **Smoke Test**: First 5 users complete full purchase + playback flow
+4. **Monitor**: Watch logs for 24 hours, respond to any errors
 
 ---
 
 **Deployment Complete!** 🚀
 
-Your PPV platform is now live. Users can purchase fixed-price access, prove ownership via Aleo, and securely decrypt content via the backend service. All payments → NFTs → Aleo tokens → decryption keys → playback.
+Your PPV platform is now live. Users can purchase fixed-price access, prove ownership via Aleo, and securely decrypt content via Next.js route handlers. All payments → NFTs → Aleo tokens → decryption keys → playback.
 
-For questions or issues, refer to `.env.example` for configuration variables and review Phase 5–7 code in `src/lib/`, `scripts/`, and `backend/` for implementation details.
+For questions or issues, refer to `.env.example` for configuration variables and review Phase 5–7 code in `src/lib/`, `scripts/`, and `src/app/api/` for implementation details.
