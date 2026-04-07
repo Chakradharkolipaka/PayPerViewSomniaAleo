@@ -23,7 +23,8 @@ import {
   payPerViewAbi,
   accessNftAbi,
 } from "@/constants";
-import { grantViewToken, consumeViewToken } from "@/lib/aleo-wallet";
+import { decodeEventLog } from "viem";
+import { grantViewToken } from "@/lib/aleo-wallet";
 import { decryptAndPlay } from "@/lib/decrypt";
 import { classifyError } from "@/lib/ppv-errors";
 
@@ -39,25 +40,16 @@ type ViewStep =
   | "playing"
   | "error";
 
-const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000" as const;
-
-// Dummy video catalog for now (TODO: move to backend /api/videos endpoint)
-const VIDEOS: Record<number, { title: string; durationSeconds: number; coverUrl: string }> = {
-  1: {
-    title: "Getting Started with Aleo",
-    durationSeconds: 600,
-    coverUrl: "/thumbnails/1.jpg",
-  },
-  2: {
-    title: "Advanced Aleo Proofs",
-    durationSeconds: 1200,
-    coverUrl: "/thumbnails/2.jpg",
-  },
+type VideoMeta = {
+  title: string;
+  description: string;
+  creator: string;
+  priceSTT: string;
 };
 
 export default function VideoWatchPage({ params }: { params: { videoId: string } }) {
   const videoId = Number(params.videoId);
-  const video = VIDEOS[videoId] || { title: `Video ${videoId}`, durationSeconds: 0, coverUrl: "" };
+  const [video, setVideo] = useState<VideoMeta | null>(null);
 
   // Somnia wallet (via wagmi)
   const { address: somniaAddress, isConnected: somniaConnected, chainId } = useAccount();
@@ -83,6 +75,27 @@ export default function VideoWatchPage({ params }: { params: { videoId: string }
   const [lastAleoProofId, setLastAleoProofId] = useState<string>("");
   const [tokenId, setTokenId] = useState<string>("");
   const [decryptedUrl, setDecryptedUrl] = useState<string>("");
+
+  useEffect(() => {
+    async function loadVideoMeta() {
+      try {
+        const res = await fetch(`/api/video-meta/${videoId}`, { cache: "no-store" });
+        if (!res.ok) {
+          throw new Error(`Failed to load video metadata (${res.status})`);
+        }
+
+        const payload = (await res.json()) as VideoMeta;
+        setVideo(payload);
+      } catch (err) {
+        const classified = classifyError(err);
+        setViewStep("error");
+        setStepMessage(classified.message);
+        setErrorMessage(classified.detailed);
+      }
+    }
+
+    loadVideoMeta();
+  }, [videoId]);
 
   // Somnia contract interactions
   const { data: balanceData } = useBalance({ address: somniaAddress });
@@ -211,12 +224,29 @@ export default function VideoWatchPage({ params }: { params: { videoId: string }
   useEffect(() => {
     if (payTxData?.transactionHash && !tokenId) {
       setViewStep("minting");
-      setStepMessage("NFT minted! Proceeding to Aleo proof generation...");
-      addEvent("AccessNFT minted from payment");
-      
-      // TODO: Parse PaymentReceived event to get tokenId
-      // For now, assume tokenId 1
-      setTokenId("1");
+      setStepMessage("Payment confirmed. Resolving minted access token...");
+
+      for (const log of payTxData.logs) {
+        try {
+          const decoded = decodeEventLog({
+            abi: payPerViewAbi,
+            data: log.data,
+            topics: log.topics,
+          });
+
+          if (decoded.eventName === "AccessMinted") {
+            const mintedTokenId = decoded.args.tokenId?.toString();
+            if (mintedTokenId) {
+              setTokenId(mintedTokenId);
+              addEvent(`AccessNFT minted from payment: token ${mintedTokenId}`);
+              setStepMessage("NFT minted! Proceeding to Aleo proof generation...");
+              break;
+            }
+          }
+        } catch {
+          // ignore unrelated logs
+        }
+      }
     }
   }, [payTxData, tokenId, addEvent]);
 
@@ -326,8 +356,8 @@ export default function VideoWatchPage({ params }: { params: { videoId: string }
     <main className="container mx-auto px-4 py-10 max-w-2xl">
       {/* Header */}
       <div className="mb-6">
-        <h1 className="text-3xl font-bold">{video.title}</h1>
-        <p className="text-gray-600">{video.durationSeconds} seconds • Video #{videoId}</p>
+        <h1 className="text-3xl font-bold">{video?.title || `Video ${videoId}`}</h1>
+        <p className="text-gray-600">{video?.description || "Encrypted pay-per-view content"}</p>
       </div>
 
       {/* Progress Banner */}
@@ -353,13 +383,10 @@ export default function VideoWatchPage({ params }: { params: { videoId: string }
         </div>
       ) : (
         <div className="mb-6 rounded-lg bg-gray-200 h-64 flex items-center justify-center">
-          <Image
-            src={video.coverUrl}
-            alt={video.title}
-            width={640}
-            height={360}
-            className="w-full h-full object-cover"
-          />
+          <div className="text-center px-6">
+            <p className="text-lg font-semibold">Locked Content</p>
+            <p className="text-sm text-gray-600 mt-1">Pay once to unlock fullscreen playback.</p>
+          </div>
         </div>
       )}
 

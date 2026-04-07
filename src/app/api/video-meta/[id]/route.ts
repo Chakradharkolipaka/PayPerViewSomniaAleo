@@ -14,7 +14,7 @@ export async function GET(
     return NextResponse.json({ error: "Invalid video id" }, { status: 400 });
   }
 
-  const meta = getVideoMeta(videoId);
+  const meta = await getVideoMeta(videoId);
 
   if (!meta) {
     return NextResponse.json({ error: "Video not found" }, { status: 404 });

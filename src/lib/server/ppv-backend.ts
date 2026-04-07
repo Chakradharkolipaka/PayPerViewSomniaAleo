@@ -1,10 +1,13 @@
 import { ethers } from "ethers";
 import { createHmac } from "crypto";
+import { getVideoById } from "@/lib/server/video-catalog";
 
 type VideoMeta = {
   title: string;
-  thumbnail: string;
+  description: string;
+  creator: string;
   priceSTT: string;
+  encryptedAssetUrl: string;
 };
 
 export class PPVServerError extends Error {
@@ -16,19 +19,6 @@ export class PPVServerError extends Error {
     this.statusCode = statusCode;
   }
 }
-
-const VIDEO_CATALOG: Record<number, VideoMeta> = {
-  1: {
-    title: "Introduction to Zero-Knowledge Proofs",
-    thumbnail: "/thumbnails/1.jpg",
-    priceSTT: "0.005",
-  },
-  2: {
-    title: "Aleo Privacy Deep Dive",
-    thumbnail: "/thumbnails/2.jpg",
-    priceSTT: "0.005",
-  },
-};
 
 const accessNftAbi = [
   "function ownerOf(uint256 tokenId) external view returns (address)",
@@ -87,8 +77,17 @@ function getNftContract() {
   return new ethers.Contract(contractAddress, accessNftAbi, wallet);
 }
 
-export function getVideoMeta(videoId: number): VideoMeta | undefined {
-  return VIDEO_CATALOG[videoId];
+export async function getVideoMeta(videoId: number): Promise<VideoMeta | undefined> {
+  const video = await getVideoById(videoId);
+  if (!video) return undefined;
+
+  return {
+    title: video.title,
+    description: video.description,
+    creator: video.creator,
+    priceSTT: video.priceSTT,
+    encryptedAssetUrl: video.encryptedAssetUrl,
+  };
 }
 
 export async function verifyAndServeAccess(input: {
@@ -121,6 +120,11 @@ export async function verifyAndServeAccess(input: {
   }
 
   const videoId = await contract.tokenVideo(tokenId);
+  const videoMeta = await getVideoMeta(Number(videoId));
+  if (!videoMeta) {
+    throw new PPVServerError(404, "Unsupported video id for this access token.");
+  }
+
   const decryptionKey = deriveVideoDecryptionKey(videoId);
 
   const burnTx = await contract.consumeAccess(tokenId);

@@ -1,28 +1,40 @@
 "use client";
 
 import Link from "next/link";
+import React, { useEffect, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
-const videos = [
-	{
-		id: 1,
-		title: "Private Creator Session 01",
-		summary: "Single-view access gated by fixed 0.005 STT payment + Aleo proof.",
-	},
-	{
-		id: 2,
-		title: "Private Creator Session 02",
-		summary: "Single-use NFT is consumed on first verified viewing session.",
-	},
-	{
-		id: 3,
-		title: "Private Creator Session 03",
-		summary: "Encrypted static assets unlocked with Aleo-derived view key.",
-	},
-];
+type VideoCard = {
+  id: number;
+  title: string;
+  description: string;
+  creator: string;
+  priceSTT: string;
+};
 
 export default function Home() {
+	const [videos, setVideos] = useState<VideoCard[]>([]);
+	const [loading, setLoading] = useState(true);
+	const [error, setError] = useState("");
+
+	useEffect(() => {
+		async function loadVideos() {
+			try {
+				const res = await fetch("/api/videos", { cache: "no-store" });
+				if (!res.ok) throw new Error(`Failed to load videos (${res.status})`);
+				const payload = (await res.json()) as { videos: VideoCard[] };
+				setVideos(payload.videos || []);
+			} catch (err) {
+				setError(err instanceof Error ? err.message : "Failed to load videos");
+			} finally {
+				setLoading(false);
+			}
+		}
+
+		loadVideos();
+	}, []);
+
 	return (
 		<main className="container mx-auto px-4 py-10 space-y-8">
 			<section className="space-y-3">
@@ -35,23 +47,37 @@ export default function Home() {
 				</p>
 			</section>
 
-			<section className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-				{videos.map((video) => (
-					<Card key={video.id} className="h-full">
-						<CardHeader>
-							<CardTitle>{video.title}</CardTitle>
-							<CardDescription>Video ID: {video.id}</CardDescription>
-						</CardHeader>
-						<CardContent className="space-y-4">
-							<p className="text-sm text-muted-foreground">
-								{video.summary}
-							</p>
-							<Link href={`/videos/${video.id}`}>
-								<Button className="w-full">Open Watch Page</Button>
+			<section>
+				{loading && <p className="text-muted-foreground">Loading minted videos...</p>}
+				{error && <p className="text-red-500">{error}</p>}
+				{!loading && !error && videos.length === 0 && (
+					<Card>
+						<CardContent className="pt-6 space-y-3">
+							<p className="text-muted-foreground">No videos minted yet. Create your first one.</p>
+							<Link href="/mint">
+								<Button>Go to Mint</Button>
 							</Link>
 						</CardContent>
 					</Card>
-				))}
+				)}
+
+				<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+					{videos.map((video) => (
+						<Card key={video.id} className="h-full">
+							<CardHeader>
+								<CardTitle>{video.title}</CardTitle>
+								<CardDescription>Creator: {video.creator.slice(0, 8)}...</CardDescription>
+							</CardHeader>
+							<CardContent className="space-y-4">
+								<p className="text-sm text-muted-foreground">{video.description}</p>
+								<p className="text-xs text-muted-foreground">Price: {video.priceSTT} STT • Single-view access</p>
+								<Link href={`/videos/${video.id}`}>
+									<Button className="w-full">Watch</Button>
+								</Link>
+							</CardContent>
+						</Card>
+					))}
+				</div>
 			</section>
 		</main>
 	);
