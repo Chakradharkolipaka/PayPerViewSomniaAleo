@@ -1,5 +1,6 @@
 import { promises as fs } from "fs";
 import path from "path";
+import { list, put } from "@vercel/blob";
 
 export type VideoRecord = {
   id: number;
@@ -13,8 +14,25 @@ export type VideoRecord = {
 
 const STORAGE_DIR = path.join(process.cwd(), "storage");
 const CATALOG_FILE = path.join(STORAGE_DIR, "videos.json");
+const BLOB_CATALOG_PATH = "ppv/catalog/videos.json";
+
+function getBlobToken() {
+  return process.env.BLOB_READ_WRITE_TOKEN || process.env.VERCEL_BLOB_READ_WRITE_TOKEN;
+}
+
+function canUseBlobStorage() {
+  return Boolean(getBlobToken());
+}
+
+function isReadonlyFsError(error: unknown) {
+  if (!(error instanceof Error)) return false;
+  const code = (error as NodeJS.ErrnoException).code;
+  return code === "EROFS" || code === "EPERM" || code === "EACCES";
+}
 
 async function ensureCatalogFile() {
+  if (canUseBlobStorage()) return;
+
   await fs.mkdir(STORAGE_DIR, { recursive: true });
 
   try {
@@ -24,20 +42,19 @@ async function ensureCatalogFile() {
   }
 }
 
-export async function readVideoCatalog(): Promise<VideoRecord[]> {
-  await ensureCatalogFile();
-  const raw = await fs.readFile(CATALOG_FILE, "utf8");
-
-  try {
-    const parsed = JSON.parse(raw) as VideoRecord[];
-    if (!Array.isArray(parsed)) return [];
-    return parsed;
-  } catch {
-    return [];
-  }
-}
-
 async function writeVideoCatalog(items: VideoRecord[]) {
+  if (canUseBlobStorage()) {
+    const token = getBlobToken();
+    await put(BLOB_CATALOG_PATH, JSON.stringify(items, null, 2), {
+      access: "private",
+      addRandomSuffix: false,
+      allowOverwrite: true,
+      contentType: "application/json",
+      token,
+    });
+    return;
+  }
+
   await ensureCatalogFile();
   await fs.writeFile(CATALOG_FILE, JSON.stringify(items, null, 2), "utf8");
 }
@@ -83,4 +100,46 @@ export async function setVideoEncryptedAsset(videoId: number, encryptedAssetUrl:
     item.id === videoId ? { ...item, encryptedAssetUrl } : item
   );
   await writeVideoCatalog(updated);
+}
+
+async function readCatalogFromBlob(): Promise<VideoRecord[]> {
+  const token = getBlobToken();
+  const result = await list({ prefix: BLOB_CATALOG_PATH, limit: 1, token });
+  const blob = result.blobs.find((entry) => entry.pathname === BLOB_CATALOG_PATH) ?? result.blobs[0];
+
+  if (!blob) return [];
+
+  const response = await fetch(blob.url, { cache: "no-store" });
+  if (!response.ok) return [];
+
+  const parsed = (await response.json()) as VideoRecord[];
+  return Array.isArray(parsed) ? parsed : [];
+}
+
+export async function readVideoCatalog(): Promise<VideoRecord[]> {
+  if (canUseBlobStorage()) {
+    try {
+      return await readCatalogFromBlob();
+    } catch {
+      return [];
+    }
+  }
+
+  try {
+    await ensureCatalogFile();
+    const raw = await fs.readFile(CATALOG_FILE, "utf8");
+
+    try {
+      const parsed = JSON.parse(raw) as VideoRecord[];
+      if (!Array.isArray(parsed)) return [];
+      return parsed;
+    } catch {
+      return [];
+    }
+  } catch (error) {
+    if (isReadonlyFsError(error)) {
+      return [];
+    }
+    throw error;
+  }
 }
