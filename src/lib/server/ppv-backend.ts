@@ -1,4 +1,5 @@
 import { ethers } from "ethers";
+import { createHmac } from "crypto";
 
 type VideoMeta = {
   title: string;
@@ -46,6 +47,21 @@ function getAccessNftAddress() {
 
 function getBackendPrivateKey() {
   return process.env.BACKEND_PRIVATE_KEY;
+}
+
+function getMasterKey() {
+  return process.env.PPV_MASTER_KEY;
+}
+
+function deriveVideoDecryptionKey(videoId: bigint) {
+  const masterKey = getMasterKey();
+  if (!masterKey) {
+    throw new PPVServerError(500, "Server encryption key is not configured.");
+  }
+
+  return createHmac("sha256", masterKey)
+    .update(`ppv:${videoId.toString()}`)
+    .digest("hex");
 }
 
 function getNftContract() {
@@ -105,11 +121,7 @@ export async function verifyAndServeAccess(input: {
   }
 
   const videoId = await contract.tokenVideo(tokenId);
-  const decryptionKey = process.env[`DECRYPTION_KEY_VIDEO_${videoId}`];
-
-  if (!decryptionKey) {
-    throw new PPVServerError(500, "Content key not found. Contact support.");
-  }
+  const decryptionKey = deriveVideoDecryptionKey(videoId);
 
   const burnTx = await contract.consumeAccess(tokenId);
   await burnTx.wait();

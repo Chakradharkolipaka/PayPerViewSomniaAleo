@@ -2,20 +2,23 @@
 
 /**
  * scripts/encrypt-video.mjs
- * Encrypts a local MP4 video with AES-256-CBC and outputs hex-encoded key.
+ * Encrypts a local MP4 video with AES-256-CBC.
+ *
+ * The encryption key is deterministically derived from PPV_MASTER_KEY + videoId,
+ * so no per-video DECRYPTION_KEY env entries are required.
  *
  * Usage:
  *   node scripts/encrypt-video.mjs my-video.mp4 2024
  *
  * Output:
  *   - Encrypted: public/encrypted/video_2024.enc (IV + ciphertext)
- *   - Key: Printed to stdout for backend DECRYPTION_KEY_VIDEO_<id> env var
+ *   - Deterministic key derivation fingerprint (for sanity check)
  *
  * Workflow:
  *   1. Run this script for each video during deployment prep
  *   2. Copy encrypted blobs to public/encrypted/ (auto-done here)
- *   3. Set backend env vars: DECRYPTION_KEY_VIDEO_2024=<hex-key>
- *   4. On purchase, backend serves the hex key; frontend decrypts with decryptAndPlay()
+ *   3. Ensure PPV_MASTER_KEY is set in server environment
+ *   4. On purchase, backend derives the same key and serves it to frontend
  */
 
 import fs from "fs";
@@ -25,6 +28,13 @@ import { fileURLToPath } from "url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(__dirname, "..");
+
+function deriveVideoKey(videoIdValue, masterKey) {
+  return crypto
+    .createHmac("sha256", masterKey)
+    .update(`ppv:${videoIdValue}`)
+    .digest();
+}
 
 // Parse args
 const [videoFile, videoId] = process.argv.slice(2);
@@ -41,13 +51,21 @@ if (!fs.existsSync(videoPath)) {
 }
 
 try {
+  const masterKey = process.env.PPV_MASTER_KEY;
+  if (!masterKey) {
+    console.error(
+      "[encrypt-video] Missing PPV_MASTER_KEY. Set it once in your shell or .env.local before encrypting videos."
+    );
+    process.exit(1);
+  }
+
   // 1. Read video bytes
   const videoBuffer = fs.readFileSync(videoPath);
   console.error(`[encrypt-video] Read ${videoBuffer.length} bytes from ${videoFile}`);
 
-  // 2. Generate random IV (16 bytes) and key (32 bytes)
+  // 2. Generate random IV (16 bytes) and derive deterministic key (32 bytes)
   const iv = crypto.randomBytes(16);
-  const key = crypto.randomBytes(32);
+  const key = deriveVideoKey(videoId, masterKey);
 
   // 3. Encrypt with AES-256-CBC
   const cipher = crypto.createCipheriv("aes-256-cbc", key, iv);
@@ -71,13 +89,12 @@ try {
     `[encrypt-video] Wrote encrypted asset: ${encryptedFile} (${encryptedWithIv.length} bytes)`
   );
 
-  // 7. Output hex key (backend will store this in DECRYPTION_KEY_VIDEO_<id>)
-  const hexKey = key.toString("hex");
-  console.log(hexKey);
-
-  console.error(
-    `[encrypt-video] Key for backend env: DECRYPTION_KEY_VIDEO_${videoId}=${hexKey}`
-  );
+  const fingerprint = crypto
+    .createHash("sha256")
+    .update(key)
+    .digest("hex")
+    .slice(0, 12);
+  console.error(`[encrypt-video] Deterministic key fingerprint for video_${videoId}: ${fingerprint}`);
 } catch (err) {
   console.error(`[encrypt-video] Error:`, err.message);
   process.exit(1);

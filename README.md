@@ -60,14 +60,16 @@ This app implements a fixed-price, single-view architecture:
 - `NEXT_PUBLIC_SOMNIA_RPC_URL`
 - `NEXT_PUBLIC_PAYPERVIEW_ADDRESS`
 - `NEXT_PUBLIC_ACCESS_NFT_ADDRESS`
+- `NEXT_PUBLIC_ALEO_PROGRAM_ID`
 - `SOMNIA_RPC_URL`
 - `BACKEND_PRIVATE_KEY`
 - `ACCESS_NFT_ADDRESS`
-- `ALEO_PROGRAM_ID`
-- `ALEO_PRIVATE_KEY`
-- `ALEO_RPC_URL`
-- `ALEO_NETWORK`
+- `PPV_MASTER_KEY`
+
+Optional (if using `/api/content` metadata endpoint):
+
 - `ENCRYPTED_ASSET_VIDEO_1`
+- `ENCRYPTED_ASSET_VIDEO_2`
 
 ## Commands
 

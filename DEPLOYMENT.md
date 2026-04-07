@@ -130,15 +130,13 @@ node scripts/encrypt-video.mjs my-video.mp4 1
 # Output:
 #   [encrypt-video] Read 123456789 bytes from my-video.mp4
 #   [encrypt-video] Wrote encrypted asset: public/encrypted/video_1.enc (123456890 bytes)
-#   a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6... (hex key)
-#   [encrypt-video] Key for server env: DECRYPTION_KEY_VIDEO_1=a1b2c3d4e5f6...
+#   [encrypt-video] Deterministic key fingerprint for video_1: 9f3a1c...
 
-# C.2 Store the hex key in app/server env:
-#   DECRYPTION_KEY_VIDEO_1=a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6...
+# C.2 Ensure PPV_MASTER_KEY is set in app/server env before encryption and runtime.
 
 # C.3 Repeat for all videos (2, 3, 4, ...)
 node scripts/encrypt-video.mjs another-video.mp4 2
-# → DECRYPTION_KEY_VIDEO_2=...
+# → video_2.enc generated with deterministic key derivation
 
 # C.4 Verify encrypted assets in public/encrypted/:
 ls -lah public/encrypted/
@@ -164,7 +162,7 @@ ls -lah public/encrypted/
 #### Prerequisites
 - Node.js v18+
 - Next.js API routes in `src/app/api/`
-- All DECRYPTION_KEY_VIDEO_* env vars set
+- PPV_MASTER_KEY set
 
 #### Step 2: Set Environment Variables
 
@@ -172,9 +170,7 @@ ls -lah public/encrypted/
 # D.1 Use your app-level .env.local or deployment env settings:
 export SOMNIA_RPC_URL=https://somnia-testnet-rpc.allthatnode.com:8545
 export ACCESS_NFT_ADDRESS=0x<ADDRESS_A>
-export DECRYPTION_KEY_VIDEO_1=a1b2c3d4e5f6...
-export DECRYPTION_KEY_VIDEO_2=f6e5d4c3b2a1...
-# ... (repeat for all videos)
+export PPV_MASTER_KEY=<long-random-secret>
 
 # D.2 Next.js route handlers run inside the main app deployment.
 ```
@@ -228,7 +224,7 @@ curl -X POST http://localhost:3000/api/verify-and-serve \
 
 #### Prerequisites
 - All NEXT_PUBLIC_* env vars filled in
-- Server route-handler env vars set: `SOMNIA_RPC_URL`, `BACKEND_PRIVATE_KEY`, `ACCESS_NFT_ADDRESS`, `DECRYPTION_KEY_VIDEO_*`
+- Server route-handler env vars set: `SOMNIA_RPC_URL`, `BACKEND_PRIVATE_KEY`, `ACCESS_NFT_ADDRESS`, `PPV_MASTER_KEY`
 - Build succeeds without errors
 
 #### Step 1: Lint for YouTube URLs
@@ -272,6 +268,7 @@ grep -r "youtube\|youtu\.be\|youtube\.com" .next/ public/ --include="*.js" --inc
 # SOMNIA_RPC_URL=https://somnia-testnet-rpc.allthatnode.com:8545
 # BACKEND_PRIVATE_KEY=0x<BACKEND_KEY>
 # ACCESS_NFT_ADDRESS=0x<ADDRESS_A>
+# PPV_MASTER_KEY=<long-random-secret>
 
 # E.5 Deploy:
 vercel deploy --prod
@@ -404,7 +401,7 @@ vercel deploy --prod
 - [ ] **Encrypted Content**
   - [ ] All videos encrypted via scripts/encrypt-video.mjs
   - [ ] Encrypted files deployed to CDN with correct CORS
-  - [ ] DECRYPTION_KEY_VIDEO_* env vars set in server environment
+  - [ ] PPV_MASTER_KEY set in server environment
 
 - [ ] **Server Routes**
   - [ ] Next.js route handlers running and verified
