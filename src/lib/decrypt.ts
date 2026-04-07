@@ -33,7 +33,7 @@ export async function decryptAndPlay(
     // 2. Extract IV (first 16 bytes) and ciphertext (remainder)
     const ivBytes = encryptedBuffer.slice(0, 16);
     const data = encryptedBuffer.slice(16);
-    const keyBytes = hexToBytes(hexKey);
+    const keyBytes = hexToBuffer(hexKey);
 
     // 3. Import key into Web Crypto API
     const cryptoKey = await crypto.subtle.importKey(
@@ -62,17 +62,18 @@ export async function decryptAndPlay(
 }
 
 /**
- * hexToBytes
- * Converts a hex string to Uint8Array.
+ * hexToBuffer
+ * Converts a hex string to ArrayBuffer.
  * Example: "48656c6c6f" → [0x48, 0x65, 0x6c, 0x6c, 0x6f]
  */
-function hexToBytes(hex: string): Uint8Array {
+function hexToBuffer(hex: string): ArrayBuffer {
   if (hex.length % 2 !== 0) {
     throw new Error("Hex string must have even length");
   }
-  const arr = new Uint8Array(hex.length / 2);
+  const buffer = new ArrayBuffer(hex.length / 2);
+  const arr = new Uint8Array(buffer);
   for (let i = 0; i < hex.length; i += 2) {
     arr[i / 2] = parseInt(hex.slice(i, i + 2), 16);
   }
-  return arr;
+  return buffer;
 }
