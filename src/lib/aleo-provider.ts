@@ -5,6 +5,8 @@ type AleoProvider = {
   getAccounts?: () => Promise<unknown>;
   request?: (payload: unknown) => Promise<unknown>;
   account?: unknown;
+  accounts?: unknown;
+  addresses?: unknown;
   address?: unknown;
   publicKey?: unknown;
   selectedAccount?: unknown;
@@ -240,9 +242,27 @@ async function requestWithMethod(provider: AleoProvider, method: string, params:
   }
 }
 
+async function requestWithVariants(provider: AleoProvider, method: string, variants: unknown[][] = []) {
+  const defaultAttempt = await requestWithMethod(provider, method);
+  if (defaultAttempt !== null && defaultAttempt !== undefined) {
+    return defaultAttempt;
+  }
+
+  for (const params of variants) {
+    const response = await requestWithMethod(provider, method, params);
+    if (response !== null && response !== undefined) {
+      return response;
+    }
+  }
+
+  return null;
+}
+
 async function readConnectedAddress(provider: AleoProvider): Promise<string | null> {
   const direct = [
     provider.account,
+    provider.accounts,
+    provider.addresses,
     provider.address,
     provider.publicKey,
     provider.selectedAccount,
@@ -258,10 +278,17 @@ async function readConnectedAddress(provider: AleoProvider): Promise<string | nu
   if (typeof provider.getAccount === "function") methodAttempts.push(() => provider.getAccount!());
   if (typeof provider.getAccounts === "function") methodAttempts.push(() => provider.getAccounts!());
   methodAttempts.push(() => requestWithMethod(provider, "getAddress"));
+  methodAttempts.push(() => requestWithMethod(provider, "getAddresses"));
   methodAttempts.push(() => requestWithMethod(provider, "aleo_getAddress"));
+  methodAttempts.push(() => requestWithMethod(provider, "aleo_getAddresses"));
   methodAttempts.push(() => requestWithMethod(provider, "account"));
+  methodAttempts.push(() => requestWithMethod(provider, "accounts"));
+  methodAttempts.push(() => requestWithMethod(provider, "selectedAccount"));
+  methodAttempts.push(() => requestWithMethod(provider, "currentAccount"));
   methodAttempts.push(() => requestWithMethod(provider, "getAccount"));
   methodAttempts.push(() => requestWithMethod(provider, "getAccounts"));
+  methodAttempts.push(() => requestWithMethod(provider, "wallet_getAccount"));
+  methodAttempts.push(() => requestWithMethod(provider, "wallet_getAccounts"));
   methodAttempts.push(() => requestWithMethod(provider, "aleo_getAccount"));
   methodAttempts.push(() => requestWithMethod(provider, "aleo_getAccounts"));
 
@@ -281,18 +308,39 @@ async function readConnectedAddress(provider: AleoProvider): Promise<string | nu
 async function connectProvider(provider: AleoProvider): Promise<unknown> {
   const attempts: Array<() => Promise<unknown>> = [];
 
+  const connectParams: unknown[][] = [
+    [{ network: "testnetbeta" }],
+    [{ network: "testnet" }],
+    [{ chainId: "aleo:testnetbeta" }],
+    [{ chain: "testnetbeta" }],
+    [{ origin: typeof window !== "undefined" ? window.location.origin : "" }],
+    [
+      {
+        network: "testnetbeta",
+        origin: typeof window !== "undefined" ? window.location.origin : "",
+      },
+    ],
+  ];
+
   if (typeof provider.requestAccount === "function") attempts.push(() => provider.requestAccount!());
   if (typeof provider.connect === "function") attempts.push(() => provider.connect!());
   if (typeof provider.getAccount === "function") attempts.push(() => provider.getAccount!());
   if (typeof provider.getAccounts === "function") attempts.push(() => provider.getAccounts!());
-  attempts.push(() => requestWithMethod(provider, "requestAccount"));
-  attempts.push(() => requestWithMethod(provider, "connect"));
-  attempts.push(() => requestWithMethod(provider, "enable"));
-  attempts.push(() => requestWithMethod(provider, "aleo_enable"));
-  attempts.push(() => requestWithMethod(provider, "wallet_enable"));
-  attempts.push(() => requestWithMethod(provider, "requestPermissions"));
-  attempts.push(() => requestWithMethod(provider, "aleo_requestAccount"));
-  attempts.push(() => requestWithMethod(provider, "aleo_connect"));
+  attempts.push(() => requestWithVariants(provider, "requestAccount", connectParams));
+  attempts.push(() => requestWithVariants(provider, "connect", connectParams));
+  attempts.push(() => requestWithVariants(provider, "enable", connectParams));
+  attempts.push(() => requestWithVariants(provider, "aleo_enable", connectParams));
+  attempts.push(() => requestWithVariants(provider, "wallet_enable", connectParams));
+  attempts.push(() => requestWithVariants(provider, "aleo_requestAccount", connectParams));
+  attempts.push(() => requestWithVariants(provider, "aleo_connect", connectParams));
+  attempts.push(() => requestWithVariants(provider, "requestAccounts", connectParams));
+  attempts.push(() => requestWithVariants(provider, "aleo_requestAccounts", connectParams));
+  attempts.push(() => requestWithVariants(provider, "authorize", connectParams));
+  attempts.push(() => requestWithVariants(provider, "aleo_authorize", connectParams));
+  attempts.push(() => requestWithVariants(provider, "requestAuthorization", connectParams));
+  attempts.push(() => requestWithVariants(provider, "aleo_requestAuthorization", connectParams));
+  attempts.push(() => requestWithVariants(provider, "requestPermissions", connectParams));
+  attempts.push(() => requestWithVariants(provider, "wallet_requestPermissions", connectParams));
 
   for (const attempt of attempts) {
     try {
