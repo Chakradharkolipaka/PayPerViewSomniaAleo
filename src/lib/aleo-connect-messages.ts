@@ -33,6 +33,11 @@ export const CONNECT_ERROR_MESSAGES: Record<
     action: "Open Leo Wallet -> Connected Sites -> remove this site. Then click Retry.",
     retryable: true,
   },
+  timeout: {
+    title: "Leo Wallet did not respond",
+    action: "Hard reload the page (Ctrl+Shift+R) and try connecting again.",
+    retryable: false,
+  },
   unknown: {
     title: "Connection failed",
     action: "Check the browser console for details. Try refreshing the page.",

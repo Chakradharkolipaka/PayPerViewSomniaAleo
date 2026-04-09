@@ -6,8 +6,6 @@ import {
   useAccount,
   useBalance,
   useReadContract,
-  useWaitForTransactionReceipt,
-  useWriteContract,
   useSwitchChain,
 } from "wagmi";
 import { Button } from "@/components/ui/button";
@@ -20,13 +18,16 @@ import {
   VIDEO_PRICE_WEI,
   payPerViewAddress,
   accessNftAddress,
-  payPerViewAbi,
+  SOMNIA_RPC,
   accessNftAbi,
 } from "@/constants";
-import { decodeEventLog } from "viem";
-import { grantViewToken } from "@/lib/aleo-wallet";
+import { AleoConnectError, grantViewToken } from "@/lib/aleo-wallet";
 import { decryptAndPlay } from "@/lib/decrypt";
 import { classifyError } from "@/lib/ppv-errors";
+import { ALEO_ERRORS, SOMNIA_PAY_ERRORS } from "@/lib/error-messages";
+import { callPayForVideo, SomniaPayError } from "@/lib/somnia-pay";
+import { runPreFlightChecks } from "@/lib/preflight";
+import { ethers } from "ethers";
 
 type ViewStep =
   | "idle"
@@ -71,10 +72,12 @@ export default function VideoWatchPage({ params }: { params: { videoId: string }
   const [viewStep, setViewStep] = useState<ViewStep>("idle");
   const [stepMessage, setStepMessage] = useState<string>("Ready to purchase access");
   const [errorMessage, setErrorMessage] = useState<string>("");
+  const [errorAction, setErrorAction] = useState<string>("");
   const [lastSomniaTxHash, setLastSomniaTxHash] = useState<string>("");
   const [lastAleoProofId, setLastAleoProofId] = useState<string>("");
   const [tokenId, setTokenId] = useState<string>("");
   const [decryptedUrl, setDecryptedUrl] = useState<string>("");
+  const [preflightIssues, setPreflightIssues] = useState<string[]>([]);
 
   useEffect(() => {
     async function loadVideoMeta() {
@@ -91,18 +94,53 @@ export default function VideoWatchPage({ params }: { params: { videoId: string }
         setViewStep("error");
         setStepMessage(classified.message);
         setErrorMessage(classified.detailed);
+        setErrorAction("Refresh and try again. If this persists, contact support.");
       }
     }
 
     loadVideoMeta();
   }, [videoId]);
 
-  // Somnia contract interactions
+  useEffect(() => {
+    let cancelled = false;
+
+    async function checkPreflight() {
+      try {
+        const provider = new ethers.JsonRpcProvider(SOMNIA_RPC);
+        const issues = await runPreFlightChecks(provider);
+
+        if (cancelled) return;
+
+        if (issues.length > 0) {
+          setPreflightIssues(issues.map((issue) => issue.message));
+          setViewStep("error");
+          setStepMessage("Pre-flight checks failed");
+          setErrorMessage(issues.map((issue) => issue.message).join(" | "));
+          setErrorAction("Resolve the blocking issues shown below before connecting or paying.");
+          addEvent(`Pre-flight blockers: ${issues.length}`);
+        } else {
+          setPreflightIssues([]);
+        }
+      } catch (err) {
+        if (cancelled) return;
+        const message = err instanceof Error ? err.message : "Pre-flight checks failed.";
+        setPreflightIssues([message]);
+        setViewStep("error");
+        setStepMessage("Pre-flight checks failed");
+        setErrorMessage(message);
+        setErrorAction("Check RPC/environment configuration and retry.");
+      }
+    }
+
+    void checkPreflight();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [addEvent]);
+
+  // Somnia contract state
   const { data: balanceData } = useBalance({ address: somniaAddress });
-  const { writeContractAsync: payAsync } = useWriteContract();
-  const { data: payTxData, isLoading: payPending } = useWaitForTransactionReceipt({
-    hash: lastSomniaTxHash ? (lastSomniaTxHash as `0x${string}`) : undefined,
-  });
 
   // Read AccessNFT ownership (check if already consumed)
   const { data: nftOwner } = useReadContract({
@@ -161,10 +199,12 @@ export default function VideoWatchPage({ params }: { params: { videoId: string }
         await connectAleo();
         addEvent("Aleo wallet connected");
       } catch (err) {
-        const classified = classifyError(err);
-        setErrorMessage(classified.message);
+        const code = err instanceof AleoConnectError ? err.code : "unknown";
+        const mapped = ALEO_ERRORS[code];
+        setErrorMessage(mapped.body);
+        setErrorAction(mapped.action + (mapped.showHardReload ? " If this persists, hard-reload (Ctrl+Shift+R)." : ""));
         setViewStep("error");
-        setStepMessage(classified.message);
+        setStepMessage(mapped.title);
       }
     }
   };
@@ -174,13 +214,20 @@ export default function VideoWatchPage({ params }: { params: { videoId: string }
    */
   const handlePay = async () => {
     if (!somniaAddress || !payPerViewAddress) return;
+    if (preflightIssues.length > 0) {
+      setViewStep("error");
+      setStepMessage("Blocked by pre-flight checks");
+      setErrorMessage(preflightIssues.join(" | "));
+      setErrorAction("Resolve the pre-flight issues first, then retry payment.");
+      return;
+    }
 
     if (!hasEnoughBalance) {
-      const err = new Error("Insufficient balance");
-      const classified = classifyError(err);
+      const mapped = SOMNIA_PAY_ERRORS.insufficient_balance;
       setViewStep("error");
-      setStepMessage(classified.message);
-      setErrorMessage(classified.detailed);
+      setStepMessage(mapped.title);
+      setErrorMessage(mapped.body);
+      setErrorAction(mapped.action);
       addEvent("Payment failed: insufficient balance");
       return;
     }
@@ -195,60 +242,45 @@ export default function VideoWatchPage({ params }: { params: { videoId: string }
     try {
       setViewStep("paying");
       setStepMessage("Confirm payment in your wallet");
+      setErrorMessage("");
+      setErrorAction("");
       addEvent("User initiated payment");
 
-      const hash = await payAsync({
-        address: payPerViewAddress,
-        abi: payPerViewAbi,
-        functionName: "pay",
-        args: [BigInt(videoId)],
-        value: VIDEO_PRICE_WEI,
-      });
+      const result = await callPayForVideo(
+        videoId,
+        balanceData?.value ?? 0n,
+        (txHash) => {
+          setLastSomniaTxHash(txHash);
+          setViewStep("tx-pending");
+          setStepMessage("Waiting for payment confirmation...");
+          addEvent(`Payment tx sent: ${txHash.slice(0, 16)}...`);
+        }
+      );
 
-      if (hash) {
-        setLastSomniaTxHash(hash);
-        setViewStep("tx-pending");
-        setStepMessage("Waiting for payment confirmation...");
-        addEvent(`Payment tx sent: ${hash.slice(0, 16)}...`);
+      if (result.txHash) {
+        setLastSomniaTxHash(result.txHash);
+      }
+
+      if (result.tokenId > 0n) {
+        const mintedTokenId = result.tokenId.toString();
+        setTokenId(mintedTokenId);
+        setViewStep("minting");
+        setStepMessage("NFT minted! Proceeding to Aleo proof generation...");
+        addEvent(`AccessNFT minted from payment: token ${mintedTokenId}`);
+      } else {
+        setViewStep("minting");
+        setStepMessage("Payment confirmed. Resolving minted access token...");
       }
     } catch (err) {
-      const classified = classifyError(err);
+      const code = err instanceof SomniaPayError ? err.code : "unknown";
+      const mapped = SOMNIA_PAY_ERRORS[code];
       setViewStep("error");
-      setStepMessage(classified.message);
-      setErrorMessage(classified.detailed);
-      addEvent(`Payment failed: ${classified.message}`);
+      setStepMessage(mapped.title);
+      setErrorMessage(mapped.body);
+      setErrorAction(mapped.action + (mapped.showHardReload ? " If this persists, hard-reload (Ctrl+Shift+R)." : ""));
+      addEvent(`Payment failed (${code}): ${mapped.title}`);
     }
   };
-
-  // Monitor payment confirmation
-  useEffect(() => {
-    if (payTxData?.transactionHash && !tokenId) {
-      setViewStep("minting");
-      setStepMessage("Payment confirmed. Resolving minted access token...");
-
-      for (const log of payTxData.logs) {
-        try {
-          const decoded = decodeEventLog({
-            abi: payPerViewAbi,
-            data: log.data,
-            topics: log.topics,
-          });
-
-          if (decoded.eventName === "AccessMinted") {
-            const mintedTokenId = decoded.args.tokenId?.toString();
-            if (mintedTokenId) {
-              setTokenId(mintedTokenId);
-              addEvent(`AccessNFT minted from payment: token ${mintedTokenId}`);
-              setStepMessage("NFT minted! Proceeding to Aleo proof generation...");
-              break;
-            }
-          }
-        } catch {
-          // ignore unrelated logs
-        }
-      }
-    }
-  }, [payTxData, tokenId, addEvent]);
 
   /**
    * Step 2: Grant View Token (Aleo)
@@ -259,6 +291,8 @@ export default function VideoWatchPage({ params }: { params: { videoId: string }
     try {
       setViewStep("proving");
       setStepMessage("Generating Aleo proof in your wallet...");
+      setErrorMessage("");
+      setErrorAction("");
       addEvent("Starting Aleo proof generation");
 
       const programId = process.env.NEXT_PUBLIC_ALEO_PROGRAM_ID || "video_access_testnet";
@@ -279,6 +313,7 @@ export default function VideoWatchPage({ params }: { params: { videoId: string }
       setViewStep("error");
       setStepMessage(classified.message);
       setErrorMessage(classified.detailed);
+      setErrorAction("Check Aleo wallet authorization and try again.");
       addEvent(`Aleo proof failed: ${classified.message}`);
     }
   };
@@ -323,6 +358,7 @@ export default function VideoWatchPage({ params }: { params: { videoId: string }
       setViewStep("error");
       setStepMessage(classified.message);
       setErrorMessage(classified.detailed);
+      setErrorAction("Retry after verifying backend health and wallet connectivity.");
       addEvent(`Backend verify failed: ${classified.message}`);
     }
   };
@@ -347,6 +383,7 @@ export default function VideoWatchPage({ params }: { params: { videoId: string }
       setViewStep("error");
       setStepMessage(classified.message);
       setErrorMessage(classified.detailed);
+      setErrorAction("Retry decryption. If the issue persists, contact support.");
       addEvent(`Decryption failed: ${classified.message}`);
     }
   };
@@ -367,6 +404,7 @@ export default function VideoWatchPage({ params }: { params: { videoId: string }
           message={stepMessage}
           txHash={lastSomniaTxHash}
           error={errorMessage}
+          action={errorAction}
           explorerUrl={explorerUrl}
         />
       </div>
@@ -395,7 +433,9 @@ export default function VideoWatchPage({ params }: { params: { videoId: string }
         <CardHeader>
           <CardTitle>Access Flow</CardTitle>
           <CardDescription>
-            {bothConnected
+            {preflightIssues.length > 0
+              ? "Resolve pre-flight issues before connecting wallets or paying."
+              : bothConnected
               ? `Wallets connected. Ready to purchase.`
               : walletReadyError
                 ? walletReadyError
@@ -404,15 +444,26 @@ export default function VideoWatchPage({ params }: { params: { videoId: string }
         </CardHeader>
 
         <CardContent className="space-y-4">
+          {preflightIssues.length > 0 && (
+            <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+              <p className="font-semibold">Blocking Issues</p>
+              <ul className="mt-2 list-disc pl-5 space-y-1">
+                {preflightIssues.map((issue) => (
+                  <li key={issue}>{issue}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           {/* Step 0: Connect Wallets */}
           {!bothConnected && (
-            <Button onClick={handleConnectWallets} className="w-full">
+            <Button onClick={handleConnectWallets} className="w-full" disabled={preflightIssues.length > 0}>
               {walletReadyError ? "Fix Wallet" : "Connect Wallets"}
             </Button>
           )}
 
           {/* Step 1: Pay */}
-          {bothConnected && !tokenId && (
+          {bothConnected && !tokenId && preflightIssues.length === 0 && (
             <div className="space-y-2">
               {balanceData && (
                 <p className="text-sm text-gray-600">

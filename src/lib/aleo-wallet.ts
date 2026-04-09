@@ -1,5 +1,15 @@
 import { requestAleoCiphertext } from "@/lib/aleo-provider";
-import { useEffect } from "react";
+import { useCallback, useEffect, useRef } from "react";
+import { useWallet } from "@demox-labs/aleo-wallet-adapter-react";
+import { DecryptPermission, WalletAdapterNetwork, WalletReadyState } from "@demox-labs/aleo-wallet-adapter-base";
+
+const DEBUG = process.env.NEXT_PUBLIC_ALEO_DEBUG === "true";
+
+function log(...args: unknown[]) {
+  if (DEBUG) {
+    console.debug("[aleo-wallet]", ...args);
+  }
+}
 
 export type AleoConnectErrorCode =
   | "not_installed"
@@ -7,6 +17,7 @@ export type AleoConnectErrorCode =
   | "wrong_network"
   | "user_rejected"
   | "stale_auth"
+  | "timeout"
   | "unknown";
 
 export class AleoConnectError extends Error {
@@ -21,132 +32,144 @@ export class AleoConnectError extends Error {
 
 const REQUIRED_NETWORK = "testnetbeta";
 
-async function waitForLeoWalletInjection(timeoutMs = 3000, pollMs = 100): Promise<boolean> {
-  if (typeof window === "undefined") return false;
-  if (window.leoWallet) return true;
-
-  const start = Date.now();
-  while (Date.now() - start < timeoutMs) {
-    await new Promise((resolve) => setTimeout(resolve, pollMs));
-    if (window.leoWallet) {
-      return true;
-    }
-  }
-
-  return false;
-}
-
 /**
- * connectLeoWallet
- * Connects Leo Wallet with strict error classification and network checks.
+ * useAleoConnect
+ * Adapter-based Leo Wallet connect hook with strict error classification.
  */
-export async function connectLeoWallet(): Promise<{ address: string; network: string }> {
-  const injected = await waitForLeoWalletInjection(3000, 100);
+export function useAleoConnect() {
+  const { connect, connected, publicKey, wallet, wallets, connecting, select, disconnect } = useWallet();
 
-  if (!injected || typeof window === "undefined" || !window.leoWallet) {
-    throw new AleoConnectError(
-      "not_installed",
-      "Leo Wallet extension not found. Install it from leoapp.io, then refresh this page."
+  useEffect(() => {
+    if (wallet) return;
+
+    const leoCandidate = wallets.find(
+      (entry) =>
+        entry.adapter.name.toLowerCase().includes("leo") &&
+        (entry.readyState === WalletReadyState.Installed || entry.readyState === WalletReadyState.Loadable)
     );
-  }
 
-  console.debug("[aleo-wallet] window.leoWallet present:", !!window.leoWallet);
-  console.debug("[aleo-wallet] requesting connection on network:", REQUIRED_NETWORK);
+    if (leoCandidate) {
+      select(leoCandidate.adapter.name);
+    }
+  }, [wallet, wallets, select]);
 
-  let address = "";
-  let network = "";
+  const connectAleo = useCallback(async (): Promise<{ address: string; network: string }> => {
+    log("window.leoWallet present:", typeof window !== "undefined" && !!window.leoWallet);
+    log("requesting connection on network:", REQUIRED_NETWORK);
+    log("adapter selected:", wallet?.adapter?.name ?? "none");
 
-  try {
-    const result = await window.leoWallet.connect(REQUIRED_NETWORK);
-    address = result?.address ?? "";
+    const hasInstalledLeo = wallets.some(
+      (entry) =>
+        entry.adapter.name.toLowerCase().includes("leo") &&
+        (entry.readyState === WalletReadyState.Installed || entry.readyState === WalletReadyState.Loadable)
+    );
 
-    if (result?.network) {
-      network = result.network;
-    } else if (typeof window.leoWallet.requestNetwork === "function") {
-      network = await window.leoWallet.requestNetwork();
-    } else {
-      network = REQUIRED_NETWORK;
+    if (!wallet && !hasInstalledLeo) {
+      throw new AleoConnectError(
+        "not_installed",
+        "Leo Wallet not found. Install it from leoapp.io and refresh this page."
+      );
     }
 
-    console.debug("[aleo-wallet] connect result:", { address, network });
-  } catch (err: unknown) {
-    const msg = (err as Error)?.message?.toLowerCase() ?? "";
-    let code: AleoConnectErrorCode = "unknown";
-    let userMessage = "Leo Wallet connection failed.";
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<never>((_, reject) => {
+      timeoutId = setTimeout(() => {
+        reject(
+          new AleoConnectError(
+            "timeout",
+            "Leo Wallet did not respond within 30 seconds. Reload the page and try again."
+          )
+        );
+      }, 30_000);
+    });
 
-    if (msg.includes("user rejected") || msg.includes("rejected") || msg.includes("cancelled")) {
-      code = "user_rejected";
-      userMessage =
-        "You cancelled the connection request. Click Connect and approve it in the Leo Wallet popup.";
-    } else if (
-      msg.includes("dapps") ||
-      msg.includes("dapp") ||
-      msg.includes("interaction") ||
-      msg.includes("disabled")
-    ) {
-      code = "dapps_disabled";
-      userMessage =
-        "dApps interaction is disabled in Leo Wallet. Go to Settings -> dApps and enable it, then try again.";
-    } else if (
-      msg.includes("network") ||
-      msg.includes("testnet") ||
-      msg.includes("mainnet") ||
-      msg.includes("chain")
-    ) {
-      code = "wrong_network";
-      userMessage = "Your Leo Wallet is on the wrong network. Please switch to Aleo Testnet Beta.";
-    } else if (
-      msg.includes("unauthorized") ||
-      msg.includes("not authorized") ||
-      msg.includes("stale") ||
-      msg.includes("permission")
-    ) {
-      code = "stale_auth";
-      userMessage =
-        "Your previous authorization is no longer valid. Remove this site from Leo Wallet -> Connected Sites, then reconnect.";
+    try {
+      await Promise.race([
+        connect(DecryptPermission.UponRequest, WalletAdapterNetwork.TestnetBeta),
+        timeout,
+      ]);
+    } catch (err: unknown) {
+      if (err instanceof AleoConnectError) {
+        log("raw error:", err);
+        log("classified as:", err.code);
+        throw err;
+      }
+
+      const msg = (err as Error)?.message?.toLowerCase() ?? "";
+      let code: AleoConnectErrorCode = "unknown";
+      let message = "Leo Wallet connection failed.";
+
+      if (msg.includes("user rejected") || msg.includes("cancelled") || msg.includes("denied")) {
+        code = "user_rejected";
+        message = "You cancelled the Leo Wallet connection request. Click Connect and approve the popup.";
+      } else if (msg.includes("dapps") || msg.includes("interaction") || msg.includes("not allowed")) {
+        code = "dapps_disabled";
+        message = "dApps interaction is off in Leo Wallet. Enable it in Settings -> dApps and retry.";
+      } else if (msg.includes("network") || msg.includes("wrong chain")) {
+        code = "wrong_network";
+        message = "Switch Leo Wallet to Aleo Testnet Beta and retry.";
+      } else if (msg.includes("unauthorized") || msg.includes("stale") || msg.includes("not authorized")) {
+        code = "stale_auth";
+        message = "Authorization is stale. Remove this site from Leo Wallet -> Connected Sites and retry.";
+      }
+
+      log("raw error:", err);
+      log("classified as:", code);
+      throw new AleoConnectError(code, message);
+    } finally {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
     }
 
-    console.debug("[aleo-wallet] raw error:", err);
-    console.debug("[aleo-wallet] classified as:", code);
-
-    if (code === "unknown") {
-      throw new AleoConnectError("unknown", `Leo Wallet error: ${(err as Error)?.message ?? "unknown"}`);
+    const adapterNetwork = (wallet?.adapter as { network?: string } | undefined)?.network;
+    if (adapterNetwork && adapterNetwork !== WalletAdapterNetwork.TestnetBeta) {
+      throw new AleoConnectError(
+        "wrong_network",
+        `Leo Wallet returned network \"${adapterNetwork}\". Switch to Aleo Testnet Beta and retry.`
+      );
     }
 
-    throw new AleoConnectError(code, userMessage);
-  }
+    const address = publicKey || wallet?.adapter.publicKey || "";
+    if (!address || !address.startsWith("aleo1")) {
+      throw new AleoConnectError(
+        "stale_auth",
+        "Connection succeeded but no valid Aleo address was returned. Remove this site from Connected Sites and retry."
+      );
+    }
 
-  if (network !== REQUIRED_NETWORK) {
-    throw new AleoConnectError(
-      "wrong_network",
-      `Leo Wallet is on \"${network}\". Please switch to Aleo Testnet Beta in the wallet network selector.`
-    );
-  }
+    log("connect result:", { address, network: REQUIRED_NETWORK });
+    return { address, network: REQUIRED_NETWORK };
+  }, [connect, publicKey, wallet, wallets]);
 
-  if (!address || !address.startsWith("aleo1")) {
-    throw new AleoConnectError(
-      "stale_auth",
-      "The wallet returned an invalid address. Remove this site from Leo Wallet -> Connected Sites and reconnect."
-    );
-  }
-
-  return { address, network };
+  return {
+    connectAleo,
+    disconnectAleo: disconnect,
+    connecting,
+    connected,
+    address: publicKey,
+  };
 }
 
 /**
  * useLeoWalletStatus
- * Polls wallet injection state and triggers callback on disconnect.
+ * Polls wallet connection state and triggers callback on disconnect.
  */
 export function useLeoWalletStatus(onDisconnect: () => void): void {
+  const { connected } = useWallet();
+  const prevConnectedRef = useRef(false);
+
   useEffect(() => {
     const id = setInterval(() => {
-      if (typeof window !== "undefined" && !window.leoWallet) {
+      if (prevConnectedRef.current && !connected) {
         onDisconnect();
       }
+
+      prevConnectedRef.current = connected;
     }, 2000);
 
     return () => clearInterval(id);
-  }, [onDisconnect]);
+  }, [connected, onDisconnect]);
 }
 
 /**

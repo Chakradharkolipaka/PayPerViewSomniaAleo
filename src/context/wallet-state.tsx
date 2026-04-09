@@ -3,8 +3,8 @@
 import React, { createContext, useCallback, useContext, useMemo, useState } from "react";
 import { useAccount, useSwitchChain } from "wagmi";
 import { SOMNIA_CHAIN_ID } from "@/constants";
-import { CONNECT_ERROR_MESSAGES } from "@/lib/aleo-connect-messages";
-import { AleoConnectError, AleoConnectErrorCode, connectLeoWallet, useLeoWalletStatus } from "@/lib/aleo-wallet";
+import { ALEO_ERRORS } from "@/lib/error-messages";
+import { AleoConnectError, AleoConnectErrorCode, useAleoConnect, useLeoWalletStatus } from "@/lib/aleo-wallet";
 
 /**
  * Dual-wallet state management for PPV:
@@ -51,6 +51,12 @@ export function WalletStateProvider({ children }: { children: React.ReactNode })
   const [aleoAddress, setAleoAddress] = useState<string | undefined>(undefined);
   const [aleoConnected, setAleoConnected] = useState(false);
   const [aleoError, setAleoError] = useState<string | undefined>(undefined);
+  const {
+    connectAleo: connectAleoAdapter,
+    disconnectAleo: disconnectAleoAdapter,
+    connected: adapterConnected,
+    address: adapterAddress,
+  } = useAleoConnect();
 
   // Event log (for DebugPanel)
   const [events, setEvents] = useState<{ timestamp: number; message: string }[]>([]);
@@ -86,7 +92,7 @@ export function WalletStateProvider({ children }: { children: React.ReactNode })
 
     try {
       addEvent("Connecting Aleo wallet...");
-      const { address, network } = await connectLeoWallet();
+      const { address, network } = await connectAleoAdapter();
       setAleoAddress(address);
       setAleoConnected(true);
       setAleoError(undefined);
@@ -100,28 +106,30 @@ export function WalletStateProvider({ children }: { children: React.ReactNode })
         message = err.message;
       }
 
-      const meta = CONNECT_ERROR_MESSAGES[code];
-      const withRecoveryHint = meta.retryable
-        ? `${meta.action} If this persists, please hard-reload the page (Ctrl+Shift+R).`
-        : meta.action;
+      const meta = ALEO_ERRORS[code];
+      const userMessage =
+        `${meta.title}. ${meta.body} Action: ${meta.action}` +
+        (meta.showHardReload ? " If this persists, hard-reload the page (Ctrl+Shift+R)." : "");
 
-      const userMessage = `${meta.title}: ${withRecoveryHint}`;
       setAleoError(userMessage);
       addEvent(`Aleo error (${code}): ${message}`);
       throw new AleoConnectError(code, userMessage);
     }
-  }, [addEvent]);
+  }, [addEvent, connectAleoAdapter]);
 
   /**
    * disconnectAleo()
    * Manually disconnect from Aleo wallet.
    */
   const disconnectAleo = useCallback(() => {
+    void disconnectAleoAdapter().catch(() => {
+      // Local state still gets cleared even if adapter disconnect fails.
+    });
     setAleoAddress(undefined);
     setAleoConnected(false);
     setAleoError(undefined);
     addEvent("Aleo disconnected");
-  }, [addEvent]);
+  }, [addEvent, disconnectAleoAdapter]);
 
   /**
    * switchToSomnia()
@@ -148,6 +156,14 @@ export function WalletStateProvider({ children }: { children: React.ReactNode })
       : !aleoConnected
         ? aleoError || "Aleo wallet not connected"
         : undefined;
+
+  React.useEffect(() => {
+    if (adapterConnected && adapterAddress) {
+      setAleoAddress(adapterAddress);
+      setAleoConnected(true);
+      setAleoError(undefined);
+    }
+  }, [adapterConnected, adapterAddress]);
 
   const value = useMemo(
     () => ({

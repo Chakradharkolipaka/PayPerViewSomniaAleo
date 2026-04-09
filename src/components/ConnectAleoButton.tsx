@@ -1,8 +1,8 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { connectLeoWallet, AleoConnectError, AleoConnectErrorCode } from "@/lib/aleo-wallet";
-import { CONNECT_ERROR_MESSAGES } from "@/lib/aleo-connect-messages";
+import { AleoConnectError, AleoConnectErrorCode, useAleoConnect } from "@/lib/aleo-wallet";
+import { ALEO_ERRORS } from "@/lib/error-messages";
 import { Button } from "@/components/ui/button";
 
 type ConnectState =
@@ -13,12 +13,13 @@ type ConnectState =
 
 export function ConnectAleoButton() {
   const [state, setState] = useState<ConnectState>({ status: "idle" });
+  const { connectAleo } = useAleoConnect();
 
   const handleConnect = useCallback(async () => {
     setState({ status: "connecting" });
 
     try {
-      const { address, network } = await connectLeoWallet();
+      const { address, network } = await connectAleo();
       setState({ status: "connected", address, network });
     } catch (err) {
       if (err instanceof AleoConnectError) {
@@ -27,7 +28,7 @@ export function ConnectAleoButton() {
         setState({ status: "error", code: "unknown", message: String(err) });
       }
     }
-  }, []);
+  }, [connectAleo]);
 
   if (state.status === "connected") {
     return (
@@ -39,15 +40,16 @@ export function ConnectAleoButton() {
   }
 
   if (state.status === "error") {
-    const meta = CONNECT_ERROR_MESSAGES[state.code];
-    const actionText = meta.retryable
+    const meta = ALEO_ERRORS[state.code];
+    const actionText = meta.showHardReload
       ? `${meta.action} If this persists, please hard-reload the page (Ctrl+Shift+R).`
       : meta.action;
 
     return (
       <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
         <p className="font-semibold">{meta.title}</p>
-        <p className="mt-1 text-xs text-red-700/90">{actionText}</p>
+        <p className="mt-1 text-xs text-red-700/90">{meta.body}</p>
+        <p className="mt-1 text-xs font-semibold text-red-800">Action: {actionText}</p>
         {meta.retryable && (
           <Button onClick={handleConnect} className="mt-2 h-8 px-3 text-xs" variant="outline">
             Retry

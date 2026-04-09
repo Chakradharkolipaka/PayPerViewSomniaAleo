@@ -29,6 +29,7 @@ interface PopupBannerProps {
   message: string;
   txHash?: string;
   error?: string;
+  action?: string;
   explorerUrl?: string;
 }
 
@@ -76,6 +77,7 @@ export function PopupBanner({
   message,
   txHash,
   error,
+  action,
   explorerUrl,
 }: PopupBannerProps) {
   const colorClass = STEP_COLORS[viewStep];
@@ -96,9 +98,10 @@ export function PopupBanner({
         </div>
       </CardHeader>
 
-      {(error || txLink) && (
+      {(error || action || txLink) && (
         <CardContent className="text-xs space-y-2">
           {error && <div className="text-red-600 font-mono">{error}</div>}
+          {action && <div className="text-red-700 font-semibold">Action: {action}</div>}
           {txLink && (
             <a
               href={txLink}
