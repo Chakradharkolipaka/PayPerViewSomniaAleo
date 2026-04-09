@@ -18,7 +18,6 @@
   "dependencies": {
     "@aleohq/sdk": "^0.6.9",
     "@demox-labs/aleo-wallet-adapter-base": "^0.0.23",
-    "@demox-labs/aleo-wallet-adapter-leo": "^0.0.25",
     "@demox-labs/aleo-wallet-adapter-react": "^0.0.22",
     "@demox-labs/aleo-wallet-adapter-reactui": "^0.0.36",
     "@radix-ui/react-dialog": "^1.0.5",
@@ -28,6 +27,8 @@
     "@rainbow-me/rainbowkit": "^2.1.2",
     "@tanstack/react-query": "^5.40.1",
     "@vercel/blob": "^2.3.3",
+    "aleo-adapters": "^1.2.1",
+    "aleo-hooks": "^1.0.3",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
     "framer-motion": "^11.2.10",
