@@ -78,3 +78,36 @@ Optional (if using `/api/content` metadata endpoint):
 - `npm run contracts:test`
 - `npm run contracts:deploy:somnia`
 - `npm run dev`
+
+## Leo Wallet Connection Recovery (Aleo Testnet Beta)
+
+Use this flow when Leo Wallet appears configured but app connection fails due to stale authorization state.
+
+### Current vs Desired Status
+
+- Current (broken): Leo Wallet shows `testnetbeta` and an account, but dApps authorization state is stale/corrupted and connect handshakes fail.
+- Desired (healthy): App connects to Leo Wallet on `testnetbeta`, returns a valid `aleo1...` address, and shows actionable UI guidance for every failure mode.
+
+### Manual Wallet-Side Recovery (must be done in order)
+
+1. Leo Wallet -> Settings -> dApps: ensure `Allow dApps to connect` is ON.
+2. Leo Wallet -> Connected Sites (Authorized dApps): remove this app's domain entry (`localhost:3000` or deployed domain).
+3. If faucet authorization was created while dApps interaction was OFF, remove `https://faucet.aleo.org` and re-authorize later.
+4. Leo Wallet network selector: confirm `Aleo Testnet Beta` (`testnetbeta`).
+5. Hard-reload the app tab (`Ctrl+Shift+R` / `Cmd+Shift+R`).
+
+### Implemented App Hardening
+
+- Extension detection waits up to 3 seconds before classifying `not_installed`.
+- Connection errors are classified into: `not_installed`, `dapps_disabled`, `wrong_network`, `user_rejected`, `stale_auth`, `unknown`.
+- Network check is strict and case-sensitive: wallet network must equal `testnetbeta`.
+- Returned address must be present and start with `aleo1`; otherwise it is treated as `stale_auth`.
+- Debug logs are emitted for provider presence, requested network, raw wallet error, and classification.
+- Mid-session extension disappearance is detected by polling every 2 seconds.
+
+### User-Facing Error Contract
+
+- UI only shows mapped, actionable messages from centralized connection-message metadata.
+- Raw JavaScript errors are not surfaced directly to users.
+- Retry-capable errors include this explicit fallback hint:
+  - `If this persists, please hard-reload the page (Ctrl+Shift+R).`

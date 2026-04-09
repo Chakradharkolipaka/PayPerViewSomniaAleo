@@ -17,6 +17,7 @@ import { Home, PlayCircle, Upload, KeyRound, RefreshCcw } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { useWalletState } from "@/context/wallet-state";
 import { DetectedAleoWallet, listDetectedAleoWallets } from "@/lib/aleo-provider";
+import { AleoConnectError } from "@/lib/aleo-wallet";
 import { useEffect, useState } from "react";
 
 export default function Navbar() {
@@ -43,10 +44,15 @@ export default function Navbar() {
         description: "Aleo wallet connected successfully.",
       });
     } catch (err) {
+      const description =
+        err instanceof AleoConnectError
+          ? err.message
+          : "Unable to connect Leo wallet. Please check Leo Wallet settings and try again.";
+
       toast({
         variant: "destructive",
         title: "Leo connection failed",
-        description: err instanceof Error ? err.message : "Unable to connect Leo wallet.",
+        description,
       });
     } finally {
       setIsConnectingLeo(false);
