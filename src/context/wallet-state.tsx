@@ -30,7 +30,7 @@ interface WalletStateContextValue {
   walletReadyError?: string;
 
   // Wallet connection helpers
-  connectAleo: () => Promise<void>;
+  connectAleo: (preferredWalletId?: string) => Promise<void>;
   disconnectAleo: () => void;
   switchToSomnia: () => Promise<void>;
 
@@ -67,10 +67,10 @@ export function WalletStateProvider({ children }: { children: React.ReactNode })
    * Connects to Aleo SDK via window.aleo_appName.
    * User must have Aleo wallet browser extension installed.
    */
-  const connectAleo = useCallback(async () => {
+  const connectAleo = useCallback(async (preferredWalletId?: string) => {
     try {
       addEvent("Connecting Aleo wallet...");
-      const response = await requestAleoAccount();
+      const response = await requestAleoAccount(preferredWalletId);
       setAleoAddress(response);
       setAleoConnected(true);
       setAleoError(undefined);

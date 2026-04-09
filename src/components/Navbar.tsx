@@ -3,25 +3,53 @@
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { useToast } from "@/components/ui/use-toast";
 import Link from "next/link";
-import { Home, PlayCircle, Upload, KeyRound } from "lucide-react";
+import { Home, PlayCircle, Upload, KeyRound, RefreshCcw } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { useWalletState } from "@/context/wallet-state";
+import { DetectedAleoWallet, listDetectedAleoWallets } from "@/lib/aleo-provider";
+import { useEffect, useState } from "react";
 
 export default function Navbar() {
   const pathname = usePathname();
+  const { toast } = useToast();
   const { aleoConnected, aleoAddress, connectAleo, disconnectAleo } = useWalletState();
+  const [wallets, setWallets] = useState<DetectedAleoWallet[]>([]);
+  const [isConnectingLeo, setIsConnectingLeo] = useState(false);
 
-  const handleAleoToggle = async () => {
-    if (aleoConnected) {
-      disconnectAleo();
-      return;
-    }
+  const refreshWallets = () => {
+    setWallets(listDetectedAleoWallets());
+  };
 
+  useEffect(() => {
+    refreshWallets();
+  }, []);
+
+  const handleAleoConnect = async (walletId?: string) => {
+    setIsConnectingLeo(true);
     try {
-      await connectAleo();
-    } catch {
-      // Keep silent here; watch/mint flows already render detailed status messages.
+      await connectAleo(walletId);
+      toast({
+        title: "Leo connected",
+        description: "Aleo wallet connected successfully.",
+      });
+    } catch (err) {
+      toast({
+        variant: "destructive",
+        title: "Leo connection failed",
+        description: err instanceof Error ? err.message : "Unable to connect Leo wallet.",
+      });
+    } finally {
+      setIsConnectingLeo(false);
     }
   };
 
@@ -72,12 +100,52 @@ export default function Navbar() {
         </div>
         <div className="flex items-center gap-4">
           <ThemeToggle />
-          <Button variant="outline" size="sm" onClick={handleAleoToggle} className="rounded-full">
-            <KeyRound className="mr-2 h-4 w-4" />
-            {aleoConnected
-              ? `Leo ${aleoAddress ? `${aleoAddress.slice(0, 6)}...${aleoAddress.slice(-4)}` : "Connected"}`
-              : "Connect Leo"}
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className="rounded-full" disabled={isConnectingLeo}>
+                <KeyRound className="mr-2 h-4 w-4" />
+                {isConnectingLeo
+                  ? "Connecting..."
+                  : aleoConnected
+                    ? `Leo ${aleoAddress ? `${aleoAddress.slice(0, 6)}...${aleoAddress.slice(-4)}` : "Connected"}`
+                    : "Connect Leo"}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-72">
+              <DropdownMenuLabel>Leo Wallet Discovery</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+
+              {!aleoConnected && (
+                <DropdownMenuItem onClick={() => void handleAleoConnect()}>
+                  Auto detect and connect
+                </DropdownMenuItem>
+              )}
+
+              {!aleoConnected && wallets.length === 0 && (
+                <DropdownMenuItem disabled>No Aleo/Leo provider detected</DropdownMenuItem>
+              )}
+
+              {!aleoConnected &&
+                wallets.map((wallet) => (
+                  <DropdownMenuItem key={wallet.id} onClick={() => void handleAleoConnect(wallet.id)}>
+                    <div className="flex w-full items-center justify-between gap-3">
+                      <span className="truncate">{wallet.label}</span>
+                      <span className="text-[10px] text-muted-foreground">{wallet.id}</span>
+                    </div>
+                  </DropdownMenuItem>
+                ))}
+
+              {aleoConnected && (
+                <DropdownMenuItem onClick={disconnectAleo}>Disconnect Leo</DropdownMenuItem>
+              )}
+
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={refreshWallets}>
+                <RefreshCcw className="mr-2 h-3.5 w-3.5" />
+                Refresh wallet search
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <ConnectButton />
         </div>
       </div>
