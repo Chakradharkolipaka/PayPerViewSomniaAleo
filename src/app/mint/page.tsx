@@ -1,17 +1,34 @@
 "use client";
 
-import React, { FormEvent, useState } from "react";
+import React, { FormEvent, useEffect, useState } from "react";
 import { useAccount } from "wagmi";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { PopupBanner } from "@/components/PopupBanner";
+import { useToast } from "@/components/ui/use-toast";
 
 type MintStep = "idle" | "connecting" | "tx-pending" | "minting" | "playing" | "error";
 
+type HealthResponse = {
+  mintReadiness?: {
+    environment?: string;
+    ready?: boolean;
+    reasons?: string[];
+  };
+};
+
+type MintUploadResponse = {
+  error?: string;
+  code?: string;
+  action?: string;
+  videoId?: number;
+};
+
 export default function MintPage() {
   const { address } = useAccount();
+  const { toast } = useToast();
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -20,10 +37,91 @@ export default function MintPage() {
   const [message, setMessage] = useState("Ready to mint a video.");
   const [error, setError] = useState("");
   const [createdVideoId, setCreatedVideoId] = useState<number | null>(null);
+  const [mintReady, setMintReady] = useState(true);
+  const [mintReadinessMessage, setMintReadinessMessage] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadMintHealth() {
+      try {
+        const res = await fetch("/api/health", { cache: "no-store" });
+        const payload = (await res.json().catch(() => null)) as HealthResponse | null;
+        const readiness = payload?.mintReadiness;
+
+        if (cancelled || !readiness) {
+          return;
+        }
+
+        const isReady = readiness.ready !== false;
+        setMintReady(isReady);
+
+        if (!isReady) {
+          const reasons = readiness.reasons?.join(". ") || "Mint service is temporarily unavailable.";
+          setMintReadinessMessage(reasons);
+          setStep("error");
+          setMessage("Minting is temporarily unavailable.");
+          setError(reasons);
+        }
+      } catch {
+        if (cancelled) {
+          return;
+        }
+        setMintReady(false);
+        setMintReadinessMessage("Unable to verify backend health. Please try again in a moment.");
+        setStep("error");
+        setMessage("Minting status is unknown.");
+        setError("Unable to verify backend health. Please refresh or contact support.");
+      }
+    }
+
+    loadMintHealth();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  function buildMintError(payload: MintUploadResponse | null, statusCode: number) {
+    if (payload?.code === "BLOB_STORAGE_NOT_CONFIGURED") {
+      return {
+        heading: "Minting service is not configured in production.",
+        details:
+          payload.action ||
+          "Set BLOB_READ_WRITE_TOKEN in Vercel environment variables and redeploy.",
+      };
+    }
+
+    if (payload?.code === "MASTER_KEY_NOT_CONFIGURED") {
+      return {
+        heading: "Server encryption key is missing.",
+        details: payload.action || "Set PPV_MASTER_KEY in environment variables and redeploy.",
+      };
+    }
+
+    return {
+      heading: "Mint failed.",
+      details: payload?.error || `Upload failed (${statusCode})`,
+    };
+  }
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setError("");
+
+    if (!mintReady) {
+      const unavailableMessage =
+        mintReadinessMessage || "Minting is temporarily unavailable due to backend configuration.";
+      setStep("error");
+      setMessage("Minting is temporarily unavailable.");
+      setError(unavailableMessage);
+      toast({
+        variant: "destructive",
+        title: "Mint disabled",
+        description: unavailableMessage,
+      });
+      return;
+    }
 
     if (!address) {
       setStep("error");
@@ -63,11 +161,12 @@ export default function MintPage() {
       });
 
       const payload = (await res.json().catch(() => null)) as
-        | { error?: string; videoId?: number }
+        | MintUploadResponse
         | null;
 
       if (!res.ok) {
-        throw new Error(payload?.error || `Upload failed (${res.status})`);
+        const formatted = buildMintError(payload, res.status);
+        throw new Error(`${formatted.heading} ${formatted.details}`.trim());
       }
 
       setStep("minting");
@@ -77,9 +176,15 @@ export default function MintPage() {
       setStep("playing");
       setMessage("Mint complete. You can now open the watch page.");
     } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "Unknown mint error";
       setStep("error");
       setMessage("Mint failed.");
-      setError(err instanceof Error ? err.message : "Unknown mint error");
+      setError(errorMessage);
+      toast({
+        variant: "destructive",
+        title: "Mint failed",
+        description: errorMessage,
+      });
     }
   }
 
@@ -114,7 +219,12 @@ export default function MintPage() {
               onChange={(e) => setFile(e.target.files?.[0] || null)}
               required
             />
-            <Button type="submit" className="w-full">
+            {!mintReady && (
+              <p className="text-sm text-red-600" role="alert">
+                Minting is disabled: {mintReadinessMessage}
+              </p>
+            )}
+            <Button type="submit" className="w-full" disabled={!mintReady}>
               Upload & Mint
             </Button>
           </form>

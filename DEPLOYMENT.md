@@ -225,6 +225,7 @@ curl -X POST http://localhost:3000/api/verify-and-serve \
 #### Prerequisites
 - All NEXT_PUBLIC_* env vars filled in
 - Server route-handler env vars set: `SOMNIA_RPC_URL`, `BACKEND_PRIVATE_KEY`, `ACCESS_NFT_ADDRESS`, `PPV_MASTER_KEY`
+- For Vercel production minting with encrypted uploads, set one of: `BLOB_READ_WRITE_TOKEN` or `VERCEL_BLOB_READ_WRITE_TOKEN`
 - Build succeeds without errors
 
 #### Step 1: Lint for YouTube URLs
@@ -269,6 +270,7 @@ grep -r "youtube\|youtu\.be\|youtube\.com" .next/ public/ --include="*.js" --inc
 # BACKEND_PRIVATE_KEY=0x<BACKEND_KEY>
 # ACCESS_NFT_ADDRESS=0x<ADDRESS_A>
 # PPV_MASTER_KEY=<long-random-secret>
+# BLOB_READ_WRITE_TOKEN=<vercel-blob-read-write-token>
 
 # E.5 Deploy:
 vercel deploy --prod

@@ -34,7 +34,11 @@ export async function POST(request: Request) {
   try {
     if (isProduction() && !canUseBlobStorage()) {
       return NextResponse.json(
-        { error: "BLOB_READ_WRITE_TOKEN is required in production for encrypted video storage." },
+        {
+          error: "BLOB_READ_WRITE_TOKEN is required in production for encrypted video storage.",
+          code: "BLOB_STORAGE_NOT_CONFIGURED",
+          action: "Set BLOB_READ_WRITE_TOKEN (or VERCEL_BLOB_READ_WRITE_TOKEN) in Vercel Project Settings -> Environment Variables and redeploy.",
+        },
         { status: 503 }
       );
     }
@@ -99,7 +103,11 @@ export async function POST(request: Request) {
     } else {
       if (isProduction()) {
         return NextResponse.json(
-          { error: "Encrypted storage is not configured for production." },
+          {
+            error: "Encrypted storage is not configured for production.",
+            code: "BLOB_STORAGE_NOT_CONFIGURED",
+            action: "Set BLOB_READ_WRITE_TOKEN (or VERCEL_BLOB_READ_WRITE_TOKEN) in Vercel Project Settings -> Environment Variables and redeploy.",
+          },
           { status: 503 }
         );
       }
@@ -120,6 +128,16 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Upload failed";
+    if (message.includes("PPV_MASTER_KEY is missing")) {
+      return NextResponse.json(
+        {
+          error: "Server key configuration is missing for encrypted video minting.",
+          code: "MASTER_KEY_NOT_CONFIGURED",
+          action: "Set PPV_MASTER_KEY in server environment variables and redeploy.",
+        },
+        { status: 503 }
+      );
+    }
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
