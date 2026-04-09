@@ -4,6 +4,11 @@ type AleoProvider = {
   getAccount?: () => Promise<unknown>;
   getAccounts?: () => Promise<unknown>;
   request?: (payload: unknown) => Promise<unknown>;
+  account?: unknown;
+  address?: unknown;
+  publicKey?: unknown;
+  selectedAccount?: unknown;
+  currentAccount?: unknown;
   requestCiphertext?: (payload: {
     program: string;
     transition: string;
@@ -137,8 +142,51 @@ async function requestWithMethod(provider: AleoProvider, method: string, params:
   try {
     return await provider.request({ method, params });
   } catch {
-    return null;
+    try {
+      return await provider.request({ method });
+    } catch {
+      try {
+        return await provider.request(method);
+      } catch {
+        return null;
+      }
+    }
   }
+}
+
+async function readConnectedAddress(provider: AleoProvider): Promise<string | null> {
+  const direct = [
+    provider.account,
+    provider.address,
+    provider.publicKey,
+    provider.selectedAccount,
+    provider.currentAccount,
+  ];
+
+  for (const value of direct) {
+    const extracted = extractAddress(value);
+    if (extracted) return extracted;
+  }
+
+  const methodAttempts: Array<() => Promise<unknown>> = [];
+  if (typeof provider.getAccount === "function") methodAttempts.push(() => provider.getAccount!());
+  if (typeof provider.getAccounts === "function") methodAttempts.push(() => provider.getAccounts!());
+  methodAttempts.push(() => requestWithMethod(provider, "getAccount"));
+  methodAttempts.push(() => requestWithMethod(provider, "getAccounts"));
+  methodAttempts.push(() => requestWithMethod(provider, "aleo_getAccount"));
+  methodAttempts.push(() => requestWithMethod(provider, "aleo_getAccounts"));
+
+  for (const attempt of methodAttempts) {
+    try {
+      const value = await attempt();
+      const extracted = extractAddress(value);
+      if (extracted) return extracted;
+    } catch {
+      // continue probing
+    }
+  }
+
+  return null;
 }
 
 async function connectProvider(provider: AleoProvider): Promise<unknown> {
@@ -156,8 +204,13 @@ async function connectProvider(provider: AleoProvider): Promise<unknown> {
   for (const attempt of attempts) {
     try {
       const response = await attempt();
-      if (response !== null && response !== undefined) {
+      if (extractAddress(response)) {
         return response;
+      }
+
+      const connectedAddress = await readConnectedAddress(provider);
+      if (connectedAddress) {
+        return connectedAddress;
       }
     } catch {
       // try next strategy
@@ -174,7 +227,7 @@ export async function requestAleoAccount(preferredId?: string): Promise<string> 
   }
 
   const response = await connectProvider(provider);
-  const address = extractAddress(response);
+  const address = extractAddress(response) || (await readConnectedAddress(provider));
   if (!address) {
     throw new Error("Leo wallet responded without an address. Reconnect the wallet and try again.");
   }
