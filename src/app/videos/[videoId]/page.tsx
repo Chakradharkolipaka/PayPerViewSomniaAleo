@@ -385,20 +385,16 @@ export default function VideoWatchPage({ params }: { params: { videoId: string }
     } catch (err: unknown) {
       const proofError = classifyProofError(err);
 
-      // On proven permission/auth failure, refresh wallet authorization state for next retry.
       if (proofError.code === "execution_failed") {
-        addEvent("Proof permission/auth failed. Refreshing Leo authorization state.");
-        try {
-          disconnectAleo();
-          await new Promise<void>((resolve) => {
-            setTimeout(() => resolve(), 400);
-          });
-          await connectAleo();
-          addEvent("Leo authorization refreshed. User can retry proof.");
-        } catch (reAuthErr) {
-          const reAuthMessage = reAuthErr instanceof Error ? reAuthErr.message : String(reAuthErr ?? "unknown");
-          addEvent(`Leo reauthorization failed: ${reAuthMessage}`);
-        }
+        addEvent("Aleo proof execution failed in wallet. Falling back to ownership verification path.");
+        setStepMessage("Aleo proof failed in wallet. Verifying ownership on backend...");
+
+        const fallbackProofRef = lastSomniaTxHash
+          ? `wallet_tx_error:${lastSomniaTxHash}`
+          : `wallet_tx_error:${tokenId}`;
+
+        await handleVerifyAndServe(fallbackProofRef);
+        return;
       }
 
       const mapped = ALEO_PROOF_ERRORS[proofError.code];
