@@ -82,11 +82,11 @@ export async function grantViewExecution(
 
   const networkConst = WalletAdapterNetwork.TestnetBeta;
   const functionName = "grant_view";
-  const fee = 0.28;
+  const fee = 1000;
 
   const requestTx = {
     address: publicKey,
-    chainId: "testnetbeta",
+    chainId: "testnet",
     transitions: [
       {
         program: programId,
