@@ -5,8 +5,8 @@
  */
 
 export const PPV_ERRORS = {
-  WALLET_NOT_FOUND: "Wallet not detected. Please install Leo Wallet and MetaMask.",
-  WRONG_NETWORK: "Please switch MetaMask to the Somnia Devnet network.",
+  WALLET_NOT_FOUND: "Wallet not detected. Please install/enable an EVM wallet and Leo Wallet.",
+  WRONG_NETWORK: "Please switch your EVM wallet to the Somnia Devnet network.",
   INSUFFICIENT_BALANCE: "Insufficient STT balance. You need at least 0.005 STT.",
   TX_REJECTED: "Transaction cancelled. You can try again.",
   TX_FAILED: "Transaction failed on-chain. Please try again or contact support.",

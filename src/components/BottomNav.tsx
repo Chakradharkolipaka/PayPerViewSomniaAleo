@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Home, PlayCircle } from "lucide-react";
+import { Home, PlayCircle, Upload } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 
@@ -11,6 +11,7 @@ export default function BottomNav() {
   const navLinks = [
     { href: "/", icon: Home, label: "Home" },
     { href: "/videos/1", icon: PlayCircle, label: "Watch" },
+    { href: "/mint", icon: Upload, label: "Mint" },
   ];
 
   return (

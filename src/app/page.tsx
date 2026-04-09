@@ -4,17 +4,10 @@ import Link from "next/link";
 import React, { useEffect, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-
-type VideoCard = {
-  id: number;
-  title: string;
-  description: string;
-  creator: string;
-  priceSTT: string;
-};
+import NFTCard, { NFTCardVideo } from "@/components/NFTCard";
 
 export default function Home() {
-	const [videos, setVideos] = useState<VideoCard[]>([]);
+	const [videos, setVideos] = useState<NFTCardVideo[]>([]);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState("");
 
@@ -23,7 +16,7 @@ export default function Home() {
 			try {
 				const res = await fetch("/api/videos", { cache: "no-store" });
 				if (!res.ok) throw new Error(`Failed to load videos (${res.status})`);
-				const payload = (await res.json()) as { videos: VideoCard[] };
+				const payload = (await res.json()) as { videos: NFTCardVideo[] };
 				setVideos(payload.videos || []);
 			} catch (err) {
 				setError(err instanceof Error ? err.message : "Failed to load videos");
@@ -63,19 +56,7 @@ export default function Home() {
 
 				<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
 					{videos.map((video) => (
-						<Card key={video.id} className="h-full">
-							<CardHeader>
-								<CardTitle>{video.title}</CardTitle>
-								<CardDescription>Creator: {video.creator.slice(0, 8)}...</CardDescription>
-							</CardHeader>
-							<CardContent className="space-y-4">
-								<p className="text-sm text-muted-foreground">{video.description}</p>
-								<p className="text-xs text-muted-foreground">Price: {video.priceSTT} STT • Single-view access</p>
-								<Link href={`/videos/${video.id}`}>
-									<Button className="w-full">Watch</Button>
-								</Link>
-							</CardContent>
-						</Card>
+						<NFTCard key={video.id} video={video} />
 					))}
 				</div>
 			</section>

@@ -120,7 +120,7 @@ export function WalletStateProvider({ children }: { children: React.ReactNode })
   const walletReadyError = somniaOnWrongNetwork
     ? `Wrong network: Switch to Somnia (Chain ${SOMNIA_CHAIN_ID})`
     : !somniaConnected
-      ? "MetaMask not connected"
+      ? "EVM wallet not connected"
       : !aleoConnected
         ? "Aleo wallet not connected"
         : undefined;

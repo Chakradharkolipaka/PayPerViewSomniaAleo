@@ -194,7 +194,7 @@ export default function VideoWatchPage({ params }: { params: { videoId: string }
 
     try {
       setViewStep("paying");
-      setStepMessage("Confirm payment in MetaMask");
+      setStepMessage("Confirm payment in your wallet");
       addEvent("User initiated payment");
 
       const hash = await payAsync({

@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { RainbowKitProvider, getDefaultConfig } from "@rainbow-me/rainbowkit";
-import { metaMaskWallet } from "@rainbow-me/rainbowkit/wallets";
+import { injectedWallet, metaMaskWallet, walletConnectWallet } from "@rainbow-me/rainbowkit/wallets";
 import { WagmiProvider, http } from "wagmi";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
@@ -10,16 +10,25 @@ import { getSelectedChain, getSelectedRpcUrl } from "@/constants/networks";
 
 const selectedChain = getSelectedChain();
 const selectedRpcUrl = getSelectedRpcUrl();
+const walletConnectProjectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID ?? "";
 
 const config = getDefaultConfig({
   appName: "Somnia Private Pay-Per-View",
-  projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID ?? "",
+  projectId: walletConnectProjectId,
   chains: [selectedChain],
   wallets: [
     {
       groupName: "Preferred",
-      wallets: [metaMaskWallet],
+      wallets: [metaMaskWallet, injectedWallet],
     },
+    ...(walletConnectProjectId
+      ? [
+          {
+            groupName: "Universal",
+            wallets: [walletConnectWallet],
+          },
+        ]
+      : []),
   ],
   transports: {
     [selectedChain.id]: http(selectedRpcUrl),
