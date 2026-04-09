@@ -50,7 +50,7 @@ async function writeVideoCatalog(items: VideoRecord[]) {
   if (canUseBlobStorage()) {
     const token = getBlobToken();
     await put(BLOB_CATALOG_PATH, JSON.stringify(items, null, 2), {
-      access: "private",
+      access: "public",
       addRandomSuffix: false,
       allowOverwrite: true,
       contentType: "application/json",
