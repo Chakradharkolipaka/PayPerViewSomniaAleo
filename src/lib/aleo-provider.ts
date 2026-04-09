@@ -114,6 +114,48 @@ function extractAddress(value: unknown): string | null {
   return null;
 }
 
+function extractCiphertext(value: unknown, depth = 0): string | null {
+  if (depth > 4) return null;
+
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed ? trimmed : null;
+  }
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const extracted = extractCiphertext(item, depth + 1);
+      if (extracted) return extracted;
+    }
+    return null;
+  }
+
+  if (!isRecord(value)) return null;
+
+  const preferredKeys = [
+    "record",
+    "ciphertext",
+    "encryptedRecord",
+    "proofRecord",
+    "result",
+    "data",
+    "text",
+  ];
+
+  for (const key of preferredKeys) {
+    if (!(key in value)) continue;
+    const extracted = extractCiphertext(value[key], depth + 1);
+    if (extracted) return extracted;
+  }
+
+  for (const nested of Object.values(value)) {
+    const extracted = extractCiphertext(nested, depth + 1);
+    if (extracted) return extracted;
+  }
+
+  return null;
+}
+
 function formatLabel(source: string): string {
   if (source === "aleo_appName") return "Aleo App Wallet";
   if (source === "leoWallet") return "Leo Wallet";
@@ -399,9 +441,11 @@ export async function requestAleoCiphertext(payload: {
       (await requestWithMethod(provider, "request_ciphertext", [payload]));
   }
 
-  if (typeof record !== "string" || !record.trim()) {
+  const ciphertext = extractCiphertext(record);
+  if (!ciphertext) {
+    console.debug("[aleo-provider] requestAleoCiphertext invalid response", record);
     throw new Error("Leo wallet returned an invalid Aleo proof record.");
   }
 
-  return record;
+  return ciphertext;
 }

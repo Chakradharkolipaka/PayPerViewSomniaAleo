@@ -45,12 +45,14 @@ export function classifyError(err: unknown): PPVErrorClassification {
     return makeClassification("WRONG_NETWORK", err);
   }
 
-  if (msg.includes("wallet")) {
-    return makeClassification("WALLET_NOT_FOUND", err);
+  // Keep Aleo classification ahead of generic wallet checks so proof errors
+  // are not mislabeled as "wallet not detected".
+  if (msg.includes("aleo") || msg.includes("proof") || msg.includes("ciphertext") || msg.includes("record")) {
+    return makeClassification("ALEO_PROOF_FAILED", err);
   }
 
-  if (msg.includes("aleo")) {
-    return makeClassification("ALEO_PROOF_FAILED", err);
+  if (msg.includes("wallet")) {
+    return makeClassification("WALLET_NOT_FOUND", err);
   }
 
   if (msg.includes("decrypt")) {
