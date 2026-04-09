@@ -49,7 +49,10 @@ export class AleoProofError extends Error {
 }
 
 const REQUIRED_NETWORK = "testnetbeta";
-const REQUIRED_PROGRAM_ID = process.env.NEXT_PUBLIC_ALEO_PROGRAM_ID || "video_access_testnet.aleo";
+const CONFIGURED_PROGRAM_ID = process.env.NEXT_PUBLIC_ALEO_PROGRAM_ID || "video_access_testnet.aleo";
+const REQUIRED_PROGRAM_ID = CONFIGURED_PROGRAM_ID.endsWith(".aleo")
+  ? CONFIGURED_PROGRAM_ID
+  : `${CONFIGURED_PROGRAM_ID}.aleo`;
 const REQUIRED_DECRYPT_PERMISSION = DecryptPermission.OnChainHistory;
 
 type ExecutionRequestFn = (transaction: AleoTransaction) => Promise<unknown>;

@@ -52,7 +52,10 @@ type VideoMeta = {
 
 export default function VideoWatchPage({ params }: { params: { videoId: string } }) {
   const videoId = Number(params.videoId);
-  const aleoProgramId = process.env.NEXT_PUBLIC_ALEO_PROGRAM_ID || "video_access_testnet.aleo";
+  const configuredProgramId = process.env.NEXT_PUBLIC_ALEO_PROGRAM_ID || "video_access_testnet.aleo";
+  const aleoProgramId = configuredProgramId.endsWith(".aleo")
+    ? configuredProgramId
+    : `${configuredProgramId}.aleo`;
   const [video, setVideo] = useState<VideoMeta | null>(null);
 
   // Somnia wallet (via wagmi)
