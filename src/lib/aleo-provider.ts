@@ -14,6 +14,11 @@ type AleoProvider = {
     transition: string;
     inputs: string[];
   }) => Promise<unknown>;
+  provider?: unknown;
+  adapter?: unknown;
+  wallet?: unknown;
+  aleo?: unknown;
+  leo?: unknown;
 };
 
 type WalletCandidate = {
@@ -33,7 +38,64 @@ function asArray(value: unknown): unknown[] {
   return [];
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function maybeAleoAddress(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+
+  // Aleo addresses are typically bech32-like and start with aleo1.
+  if (/^aleo1[0-9a-z]+$/i.test(trimmed)) return trimmed;
+  return null;
+}
+
+function deepFindAddress(value: unknown, depth = 0): string | null {
+  if (depth > 4) return null;
+
+  const direct = maybeAleoAddress(value);
+  if (direct) return direct;
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = deepFindAddress(item, depth + 1);
+      if (found) return found;
+    }
+    return null;
+  }
+
+  if (!isRecord(value)) return null;
+
+  const preferredKeys = [
+    "address",
+    "account",
+    "publicKey",
+    "result",
+    "data",
+    "currentAccount",
+    "selectedAccount",
+  ];
+
+  for (const key of preferredKeys) {
+    if (!(key in value)) continue;
+    const found = deepFindAddress(value[key], depth + 1);
+    if (found) return found;
+  }
+
+  for (const nested of Object.values(value)) {
+    const found = deepFindAddress(nested, depth + 1);
+    if (found) return found;
+  }
+
+  return null;
+}
+
 function extractAddress(value: unknown): string | null {
+  const deep = deepFindAddress(value);
+  if (deep) return deep;
+
   if (typeof value === "string" && value.trim()) return value;
 
   if (value && typeof value === "object") {
@@ -74,6 +136,30 @@ function hasCiphertextSupport(provider: AleoProvider): boolean {
   return typeof provider.requestCiphertext === "function" || typeof provider.request === "function";
 }
 
+function normalizeCandidate(candidate: unknown): AleoProvider | null {
+  if (!isRecord(candidate)) return null;
+
+  const queue: unknown[] = [candidate];
+  const seen = new Set<unknown>();
+
+  while (queue.length > 0) {
+    const current = queue.shift();
+    if (!current || seen.has(current)) continue;
+    seen.add(current);
+
+    if (!isRecord(current)) continue;
+    const provider = current as AleoProvider;
+    if (canConnect(provider) || hasCiphertextSupport(provider)) {
+      return provider;
+    }
+
+    // Common nested wrappers from wallet adapters/extensions.
+    queue.push(provider.provider, provider.adapter, provider.wallet, provider.aleo, provider.leo);
+  }
+
+  return null;
+}
+
 function collectCandidates(): WalletCandidate[] {
   if (typeof window === "undefined") return [];
 
@@ -101,8 +187,8 @@ function collectCandidates(): WalletCandidate[] {
     if (seen.has(id)) continue;
     seen.add(id);
 
-    const provider = candidate as AleoProvider;
-    if (!canConnect(provider) && !hasCiphertextSupport(provider)) continue;
+    const provider = normalizeCandidate(candidate);
+    if (!provider) continue;
 
     candidates.push({ id, provider });
   }
@@ -171,6 +257,9 @@ async function readConnectedAddress(provider: AleoProvider): Promise<string | nu
   const methodAttempts: Array<() => Promise<unknown>> = [];
   if (typeof provider.getAccount === "function") methodAttempts.push(() => provider.getAccount!());
   if (typeof provider.getAccounts === "function") methodAttempts.push(() => provider.getAccounts!());
+  methodAttempts.push(() => requestWithMethod(provider, "getAddress"));
+  methodAttempts.push(() => requestWithMethod(provider, "aleo_getAddress"));
+  methodAttempts.push(() => requestWithMethod(provider, "account"));
   methodAttempts.push(() => requestWithMethod(provider, "getAccount"));
   methodAttempts.push(() => requestWithMethod(provider, "getAccounts"));
   methodAttempts.push(() => requestWithMethod(provider, "aleo_getAccount"));
@@ -198,6 +287,10 @@ async function connectProvider(provider: AleoProvider): Promise<unknown> {
   if (typeof provider.getAccounts === "function") attempts.push(() => provider.getAccounts!());
   attempts.push(() => requestWithMethod(provider, "requestAccount"));
   attempts.push(() => requestWithMethod(provider, "connect"));
+  attempts.push(() => requestWithMethod(provider, "enable"));
+  attempts.push(() => requestWithMethod(provider, "aleo_enable"));
+  attempts.push(() => requestWithMethod(provider, "wallet_enable"));
+  attempts.push(() => requestWithMethod(provider, "requestPermissions"));
   attempts.push(() => requestWithMethod(provider, "aleo_requestAccount"));
   attempts.push(() => requestWithMethod(provider, "aleo_connect"));
 
