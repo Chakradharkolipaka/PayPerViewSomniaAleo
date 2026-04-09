@@ -130,8 +130,8 @@ export const ALEO_PROOF_ERRORS: Record<AleoProofErrorCode, ErrorMessage> = {
   },
   execution_failed: {
     title: "Aleo proof execution failed",
-    body: "Leo Wallet could not complete the proof execution request.",
-    action: "Check Leo Wallet Connected Sites authorization for this domain, then click Retry.",
+    body: "Leo Wallet could not complete the proof execution request, often because record-read permission was not granted.",
+    action: "In Leo Wallet, remove this site from Connected Sites, reconnect, approve On-Chain History/record access, then click Retry.",
     retryable: true,
     showHardReload: false,
   },

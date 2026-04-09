@@ -49,6 +49,8 @@ export class AleoProofError extends Error {
 }
 
 const REQUIRED_NETWORK = "testnetbeta";
+const REQUIRED_PROGRAM_ID = process.env.NEXT_PUBLIC_ALEO_PROGRAM_ID || "video_access_testnet.aleo";
+const REQUIRED_DECRYPT_PERMISSION = DecryptPermission.OnChainHistory;
 
 type ExecutionRequestFn = (transaction: AleoTransaction) => Promise<unknown>;
 
@@ -136,6 +138,8 @@ export function useAleoConnect() {
   const connectAleo = useCallback(async (): Promise<{ address: string; network: string }> => {
     log("window.leoWallet present:", typeof window !== "undefined" && !!window.leoWallet);
     log("requesting connection on network:", REQUIRED_NETWORK);
+    log("requesting decrypt permission:", REQUIRED_DECRYPT_PERMISSION);
+    log("requesting program access:", REQUIRED_PROGRAM_ID);
     log("adapter selected:", wallet?.adapter?.name ?? "none");
 
     const hasInstalledLeo = wallets.some(
@@ -165,7 +169,7 @@ export function useAleoConnect() {
 
     try {
       await Promise.race([
-        connect(DecryptPermission.UponRequest, WalletAdapterNetwork.TestnetBeta),
+        connect(REQUIRED_DECRYPT_PERMISSION, WalletAdapterNetwork.TestnetBeta, [REQUIRED_PROGRAM_ID]),
         timeout,
       ]);
     } catch (err: unknown) {

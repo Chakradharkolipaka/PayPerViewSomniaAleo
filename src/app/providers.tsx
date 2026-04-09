@@ -57,7 +57,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
           <AleoWalletProvider
             wallets={aleoWallets}
             network={WalletAdapterNetwork.TestnetBeta}
-            decryptPermission={DecryptPermission.UponRequest}
+            decryptPermission={DecryptPermission.OnChainHistory}
             autoConnect={false}
           >
             <WalletModalProvider>

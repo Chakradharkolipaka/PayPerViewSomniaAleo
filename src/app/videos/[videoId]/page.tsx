@@ -316,12 +316,19 @@ export default function VideoWatchPage({ params }: { params: { videoId: string }
       // Step 3: Call backend verify-and-serve
       await handleVerifyAndServe(transactionId);
     } catch (err: unknown) {
+      const rawMessage = err instanceof Error ? err.message : String(err ?? "");
+      const isPermissionDenied = rawMessage.toLowerCase().includes("permission not granted");
       const proofError =
         err instanceof AleoProofError
           ? err
+          : isPermissionDenied
+            ? new AleoProofError(
+                "execution_failed",
+                "Leo Wallet denied requestRecordPlaintexts permission for this site/session."
+              )
           : new AleoProofError(
               "unknown",
-              `Aleo proof generation failed unexpectedly: ${(err as Error)?.message ?? "unknown"}`
+              `Aleo proof generation failed unexpectedly: ${rawMessage || "unknown"}`
             );
 
       const mapped = ALEO_PROOF_ERRORS[proofError.code];
