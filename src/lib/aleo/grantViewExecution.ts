@@ -2,13 +2,13 @@ import { Transaction, WalletAdapterNetwork } from "@demox-labs/aleo-wallet-adapt
 import type { AleoTransaction } from "@demox-labs/aleo-wallet-adapter-base";
 import { ProofError, ProofLayerError } from "@/lib/aleo/proofErrors";
 
-type RecordPlaintextRequester = (programId: string) => Promise<unknown>;
 type ExecutionRequester = (transaction: AleoTransaction) => Promise<unknown>;
 
 export interface GrantViewExecutionParams {
   publicKey: string | null | undefined;
   programId: string;
-  requestRecordPlaintexts: RecordPlaintextRequester;
+  videoId: number;
+  tokenId: string;
   requestExecution: ExecutionRequester;
 }
 
@@ -43,37 +43,10 @@ function extractTransactionId(raw: unknown): string | null {
   return null;
 }
 
-function selectPlaintextRecord(rawRecords: unknown): unknown | null {
-  if (!Array.isArray(rawRecords) || rawRecords.length === 0) {
-    return null;
-  }
-
-  const unspent = rawRecords.find((record) => {
-    if (typeof record !== "object" || record === null) {
-      return false;
-    }
-
-    const r = record as Record<string, unknown>;
-    if (typeof r.spent === "boolean") {
-      return r.spent === false;
-    }
-
-    const data = r.data;
-    if (typeof data === "object" && data !== null && "spent" in data) {
-      return (data as Record<string, unknown>).spent === false;
-    }
-
-    // If spent flag is missing, treat it as eligible.
-    return true;
-  });
-
-  return unspent ?? rawRecords[0] ?? null;
-}
-
 export async function grantViewExecution(
   params: GrantViewExecutionParams
 ): Promise<GrantViewExecutionResult> {
-  const { publicKey, programId, requestRecordPlaintexts, requestExecution } = params;
+  const { publicKey, programId, videoId, tokenId, requestExecution } = params;
 
   if (!publicKey || !publicKey.startsWith("aleo1")) {
     throw new ProofLayerError(
@@ -84,34 +57,26 @@ export async function grantViewExecution(
     );
   }
 
-  console.group("[grantViewExecution] step-2 requestRecordPlaintexts");
-  let rawRecords: unknown;
-  try {
-    rawRecords = await requestRecordPlaintexts(programId);
-    console.log("requestRecordPlaintexts raw:", rawRecords);
-  } catch (error) {
-    console.error("requestRecordPlaintexts throw:", error);
-    console.groupEnd();
+  if (!Number.isInteger(videoId) || videoId < 0) {
     throw new ProofLayerError(
       ProofError.PROOF_CALL_FAILED,
-      `[grantViewExecution:step-2] Failed to fetch plaintext records: ${
-        error instanceof Error ? error.message : String(error)
-      }`,
+      "[grantViewExecution:step-2] Invalid videoId for grant_view.",
       2,
-      error
+      { videoId }
     );
   }
-  console.groupEnd();
 
-  const plaintextAccessRecord = selectPlaintextRecord(rawRecords);
-  if (!plaintextAccessRecord) {
+  const normalizedTokenId = tokenId.trim();
+  if (!/^\d+$/.test(normalizedTokenId)) {
     throw new ProofLayerError(
       ProofError.PROOF_CALL_FAILED,
-      "[grantViewExecution:step-2] No plaintext access record found.",
+      "[grantViewExecution:step-2] Invalid tokenId for grant_view.",
       2,
-      rawRecords
+      { tokenId }
     );
   }
+
+  const grantInputs = [publicKey, `${videoId}field`, `${normalizedTokenId}u64`];
 
   const networkConst = WalletAdapterNetwork.TestnetBeta;
   const functionName = "grant_view";
@@ -122,7 +87,7 @@ export async function grantViewExecution(
     networkConst,
     programId,
     functionName,
-    [plaintextAccessRecord],
+    grantInputs,
     fee
   );
 
@@ -131,7 +96,7 @@ export async function grantViewExecution(
   console.log("function:", functionName);
   console.log("network:", networkConst);
   console.log("fee:", fee);
-  console.log("inputs (raw):", JSON.stringify([plaintextAccessRecord], null, 2));
+  console.log("inputs (raw):", JSON.stringify(grantInputs, null, 2));
   console.groupEnd();
 
   console.group("[grantViewExecution] step-3 requestExecution");

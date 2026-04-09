@@ -52,12 +52,13 @@ type VideoMeta = {
 
 export default function VideoWatchPage({ params }: { params: { videoId: string } }) {
   const videoId = Number(params.videoId);
+  const aleoProgramId = process.env.NEXT_PUBLIC_ALEO_PROGRAM_ID || "video_access_testnet.aleo";
   const [video, setVideo] = useState<VideoMeta | null>(null);
 
   // Somnia wallet (via wagmi)
   const { address: somniaAddress, isConnected: somniaConnected, chainId } = useAccount();
   const { switchChainAsync } = useSwitchChain();
-  const { requestExecution, requestRecordPlaintexts } = useWallet();
+  const { requestExecution } = useWallet();
 
   // Aleo + Somnia state management
   const {
@@ -66,6 +67,7 @@ export default function VideoWatchPage({ params }: { params: { videoId: string }
     bothConnected,
     walletReadyError,
     connectAleo,
+    disconnectAleo,
     switchToSomnia,
     addEvent,
     events,
@@ -173,6 +175,55 @@ export default function VideoWatchPage({ params }: { params: { videoId: string }
 
   // Explorer URL
   const explorerUrl = "https://explorer.somnia.network/";
+
+  const isRecordPermissionError = (message: string) => {
+    const lowered = message.toLowerCase();
+    return (
+      lowered.includes("permission not granted") ||
+      lowered.includes("walletrecordserror") ||
+      lowered.includes("on-chain history") ||
+      lowered.includes("connected sites") ||
+      lowered.includes("not authorized")
+    );
+  };
+
+  const classifyProofError = (err: unknown): AleoProofError => {
+    if (err instanceof AleoProofError) {
+      return err;
+    }
+
+    const rawMessage = err instanceof Error ? err.message : String(err ?? "unknown");
+    const lowered = rawMessage.toLowerCase();
+
+    if (isRecordPermissionError(rawMessage)) {
+      return new AleoProofError(
+        "execution_failed",
+        "Leo Wallet denied or revoked record-read permission for this site/session."
+      );
+    }
+
+    if (lowered.includes("publickey") || lowered.includes("address") || lowered.includes("wallet not ready")) {
+      return new AleoProofError("invalid_address", rawMessage);
+    }
+
+    if (
+      lowered.includes("sdk") ||
+      lowered.includes("not a function") ||
+      lowered.includes("execution methods are unavailable")
+    ) {
+      return new AleoProofError("sdk_unavailable", rawMessage);
+    }
+
+    if (
+      lowered.includes("no plaintext access record") ||
+      lowered.includes("record format") ||
+      lowered.includes("unrecognized")
+    ) {
+      return new AleoProofError("bad_record_shape", rawMessage);
+    }
+
+    return new AleoProofError("unknown", `Aleo proof generation failed unexpectedly: ${rawMessage}`);
+  };
 
   /**
    * Step 0: Connect Wallets
@@ -298,17 +349,20 @@ export default function VideoWatchPage({ params }: { params: { videoId: string }
       setErrorAction("");
       addEvent("Starting Aleo proof generation");
 
-      const programId = process.env.NEXT_PUBLIC_ALEO_PROGRAM_ID || "video_access_testnet.aleo";
-      if (typeof requestExecution !== "function" || typeof requestRecordPlaintexts !== "function") {
+        if (typeof requestExecution !== "function") {
         throw new AleoProofError("sdk_unavailable", "Leo Wallet SDK execution methods are unavailable.");
       }
 
-      const { transactionId } = await grantViewExecution({
-        publicKey: aleoAddress,
-        programId,
-        requestExecution,
-        requestRecordPlaintexts,
-      });
+      const runGrantView = async () =>
+        grantViewExecution({
+          publicKey: aleoAddress,
+          programId: aleoProgramId,
+            videoId,
+            tokenId,
+          requestExecution,
+        });
+
+      const { transactionId } = await runGrantView();
 
       setLastAleoProofId(transactionId.slice(0, 32));
       addEvent(`Aleo proof generated tx: ${transactionId.slice(0, 16)}...`);
@@ -316,20 +370,23 @@ export default function VideoWatchPage({ params }: { params: { videoId: string }
       // Step 3: Call backend verify-and-serve
       await handleVerifyAndServe(transactionId);
     } catch (err: unknown) {
-      const rawMessage = err instanceof Error ? err.message : String(err ?? "");
-      const isPermissionDenied = rawMessage.toLowerCase().includes("permission not granted");
-      const proofError =
-        err instanceof AleoProofError
-          ? err
-          : isPermissionDenied
-            ? new AleoProofError(
-                "execution_failed",
-                "Leo Wallet denied requestRecordPlaintexts permission for this site/session."
-              )
-          : new AleoProofError(
-              "unknown",
-              `Aleo proof generation failed unexpectedly: ${rawMessage || "unknown"}`
-            );
+      const proofError = classifyProofError(err);
+
+      // On proven permission/auth failure, refresh wallet authorization state for next retry.
+      if (proofError.code === "execution_failed") {
+        addEvent("Proof permission/auth failed. Refreshing Leo authorization state.");
+        try {
+          disconnectAleo();
+          await new Promise<void>((resolve) => {
+            setTimeout(() => resolve(), 400);
+          });
+          await connectAleo();
+          addEvent("Leo authorization refreshed. User can retry proof.");
+        } catch (reAuthErr) {
+          const reAuthMessage = reAuthErr instanceof Error ? reAuthErr.message : String(reAuthErr ?? "unknown");
+          addEvent(`Leo reauthorization failed: ${reAuthMessage}`);
+        }
+      }
 
       const mapped = ALEO_PROOF_ERRORS[proofError.code];
       setViewStep("error");
