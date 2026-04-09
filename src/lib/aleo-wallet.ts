@@ -2,6 +2,7 @@ import { requestAleoCiphertext } from "@/lib/aleo-provider";
 import { useCallback, useEffect, useRef } from "react";
 import { useWallet } from "@demox-labs/aleo-wallet-adapter-react";
 import { DecryptPermission, WalletAdapterNetwork, WalletReadyState } from "@demox-labs/aleo-wallet-adapter-base";
+import type { AleoTransaction } from "@demox-labs/aleo-wallet-adapter-base";
 
 const DEBUG = process.env.NEXT_PUBLIC_ALEO_DEBUG === "true";
 
@@ -20,6 +21,13 @@ export type AleoConnectErrorCode =
   | "timeout"
   | "unknown";
 
+export type AleoProofErrorCode =
+  | "invalid_address"
+  | "sdk_unavailable"
+  | "execution_failed"
+  | "bad_record_shape"
+  | "unknown";
+
 export class AleoConnectError extends Error {
   code: AleoConnectErrorCode;
 
@@ -30,7 +38,79 @@ export class AleoConnectError extends Error {
   }
 }
 
+export class AleoProofError extends Error {
+  code: AleoProofErrorCode;
+
+  constructor(code: AleoProofErrorCode, message: string) {
+    super(message);
+    this.name = "AleoProofError";
+    this.code = code;
+  }
+}
+
 const REQUIRED_NETWORK = "testnetbeta";
+
+type ExecutionRequestFn = (transaction: AleoTransaction) => Promise<unknown>;
+
+function normalizeProofRecord(result: unknown): string {
+  // Shape A: plain string
+  if (typeof result === "string" && result.length > 0) {
+    return result;
+  }
+
+  if (typeof result !== "object" || result === null) {
+    console.error("[normalizeProofRecord] unrecognized result:", result);
+    throw new AleoProofError(
+      "bad_record_shape",
+      "Aleo proof output is not a recognized string/object format."
+    );
+  }
+
+  const r = result as Record<string, unknown>;
+
+  // Shape C: { outputs: [ { value: string } ] }
+  if (Array.isArray(r.outputs) && r.outputs.length > 0) {
+    const first = r.outputs[0] as Record<string, unknown>;
+    if (typeof first?.value === "string" && first.value.length > 0) {
+      return first.value;
+    }
+  }
+
+  // Shape B: { execution: { transitions: [...] } }
+  const exec = r.execution as Record<string, unknown> | undefined;
+  if (exec && Array.isArray(exec.transitions)) {
+    for (const transition of exec.transitions as Array<Record<string, unknown>>) {
+      const outputs = transition.outputs as Array<Record<string, unknown>> | undefined;
+      if (Array.isArray(outputs) && outputs.length > 0) {
+        const value = outputs[0]?.value;
+        if (typeof value === "string" && value.length > 0) {
+          return value;
+        }
+      }
+    }
+  }
+
+  // Shape D: { transaction: { execution: { transitions: [...] } } }
+  const tx = r.transaction as Record<string, unknown> | undefined;
+  const txExec = tx?.execution as Record<string, unknown> | undefined;
+  if (txExec && Array.isArray(txExec.transitions)) {
+    for (const transition of txExec.transitions as Array<Record<string, unknown>>) {
+      const outputs = transition.outputs as Array<Record<string, unknown>> | undefined;
+      if (Array.isArray(outputs) && outputs.length > 0) {
+        const value = outputs[0]?.value;
+        if (typeof value === "string" && value.length > 0) {
+          return value;
+        }
+      }
+    }
+  }
+
+  console.error("[normalizeProofRecord] unrecognized shape:", JSON.stringify(result, null, 2));
+  throw new AleoProofError(
+    "bad_record_shape",
+    "Aleo proof output did not match any known record format."
+  );
+}
 
 /**
  * useAleoConnect
@@ -201,23 +281,96 @@ export async function grantViewToken(
   programId: string,
   viewerAddress: string,
   videoId: number,
-  tokenId: bigint
+  tokenId: bigint,
+  requestExecution?: ExecutionRequestFn
 ): Promise<string> {
+  console.group("[grantViewToken] proof attempt");
+  console.log("viewerAddress:", viewerAddress);
+  console.log("videoId:", videoId.toString());
+  console.log("tokenId:", tokenId.toString());
+  console.log("requestExecution type:", typeof requestExecution);
+  console.groupEnd();
+
+  if (!viewerAddress || typeof viewerAddress !== "string" || !viewerAddress.startsWith("aleo1")) {
+    throw new AleoProofError(
+      "invalid_address",
+      `Leo Wallet address is not ready yet. Wait 2 seconds and click Retry (received: ${JSON.stringify(
+        viewerAddress
+      )}).`
+    );
+  }
+
   try {
-    // Call grant_view via Aleo SDK / Wallet integration
-    // The wallet handles the proof internally and returns the record ciphertext
-    const record = await requestAleoCiphertext({
-      program: programId,
-      transition: "grant_view",
-      inputs: [viewerAddress, videoId.toString(), tokenId.toString()],
-    });
+    let result: unknown;
+
+    if (typeof requestExecution === "function") {
+      const tx = {
+        address: viewerAddress,
+        chainId: "testnetbeta",
+        transitions: [
+          {
+            program: programId,
+            functionName: "grant_view",
+            inputs: [viewerAddress, `${videoId.toString()}field`, `${tokenId.toString()}u64`],
+          },
+        ],
+        fee: 0.28,
+        feePrivate: false,
+      };
+
+      result = await requestExecution(tx);
+    } else {
+      result = await requestAleoCiphertext({
+        program: programId,
+        transition: "grant_view",
+        inputs: [viewerAddress, videoId.toString(), tokenId.toString()],
+      });
+    }
+
+    console.group("[grantViewToken] raw result");
+    console.log("type:", typeof result);
+    console.log("keys:", typeof result === "object" && result !== null ? Object.keys(result as object) : "n/a");
+    console.log("full:", JSON.stringify(result, null, 2));
+    console.groupEnd();
+
+    const record = normalizeProofRecord(result);
 
     console.debug("[aleo-wallet] grantViewToken success", { programId, tokenId, record });
     return record;
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : "Unknown error";
-    console.error("[aleo-wallet] grantViewToken failed", msg);
-    throw new Error(`Failed to grant view token: ${msg}`);
+  } catch (err: unknown) {
+    if (err instanceof AleoProofError) {
+      console.error("[aleo-wallet] grantViewToken failed", err.message);
+      throw err;
+    }
+
+    const msg = (err as Error)?.message?.toLowerCase() ?? "";
+    console.error("[aleo-wallet] grantViewToken failed", msg || "unknown");
+
+    if (msg.includes("rejected") || msg.includes("cancelled") || msg.includes("denied")) {
+      throw new AleoProofError(
+        "execution_failed",
+        "You rejected the Aleo proof request in Leo Wallet. Click Retry and approve the execution popup."
+      );
+    }
+
+    if (msg.includes("permission") || msg.includes("not authorized") || msg.includes("unauthorized")) {
+      throw new AleoProofError(
+        "execution_failed",
+        "Leo Wallet blocked proof execution. Re-authorize this site in Leo Wallet and retry."
+      );
+    }
+
+    if (msg.includes("program") || msg.includes("transition") || msg.includes("not found")) {
+      throw new AleoProofError(
+        "execution_failed",
+        `Aleo program ${programId} was not found on testnetbeta. Verify deployment and NEXT_PUBLIC_ALEO_PROGRAM_ID.`
+      );
+    }
+
+    throw new AleoProofError(
+      "unknown",
+      `Failed to grant view token: ${(err as Error)?.message ?? "Unknown error"}`
+    );
   }
 }
 

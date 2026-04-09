@@ -162,6 +162,9 @@ export function WalletStateProvider({ children }: { children: React.ReactNode })
       setAleoAddress(adapterAddress);
       setAleoConnected(true);
       setAleoError(undefined);
+      if (typeof window !== "undefined") {
+        (window as Window & { __aleoPublicKey?: string }).__aleoPublicKey = adapterAddress;
+      }
     }
   }, [adapterConnected, adapterAddress]);
 

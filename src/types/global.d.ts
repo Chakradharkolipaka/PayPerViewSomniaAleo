@@ -15,6 +15,7 @@ interface LeoWalletAPI {
 declare global {
   interface Window {
     leoWallet?: LeoWalletAPI;
+    __aleoPublicKey?: string;
   }
 }
 

@@ -21,10 +21,11 @@ import {
   SOMNIA_RPC,
   accessNftAbi,
 } from "@/constants";
-import { AleoConnectError, grantViewToken } from "@/lib/aleo-wallet";
+import { useWallet } from "@demox-labs/aleo-wallet-adapter-react";
+import { AleoConnectError, AleoProofError, grantViewToken } from "@/lib/aleo-wallet";
 import { decryptAndPlay } from "@/lib/decrypt";
 import { classifyError } from "@/lib/ppv-errors";
-import { ALEO_ERRORS, SOMNIA_PAY_ERRORS } from "@/lib/error-messages";
+import { ALEO_ERRORS, ALEO_PROOF_ERRORS, SOMNIA_PAY_ERRORS } from "@/lib/error-messages";
 import { callPayForVideo, SomniaPayError } from "@/lib/somnia-pay";
 import { runPreFlightChecks } from "@/lib/preflight";
 import { ethers } from "ethers";
@@ -55,6 +56,7 @@ export default function VideoWatchPage({ params }: { params: { videoId: string }
   // Somnia wallet (via wagmi)
   const { address: somniaAddress, isConnected: somniaConnected, chainId } = useAccount();
   const { switchChainAsync } = useSwitchChain();
+  const { requestExecution } = useWallet();
 
   // Aleo + Somnia state management
   const {
@@ -300,7 +302,8 @@ export default function VideoWatchPage({ params }: { params: { videoId: string }
         programId,
         aleoAddress,
         videoId,
-        BigInt(tokenId)
+        BigInt(tokenId),
+        requestExecution
       );
 
       setLastAleoProofId(viewTokenRecord.slice(0, 32));
@@ -308,13 +311,22 @@ export default function VideoWatchPage({ params }: { params: { videoId: string }
 
       // Step 3: Call backend verify-and-serve
       await handleVerifyAndServe(viewTokenRecord);
-    } catch (err) {
-      const classified = classifyError(err);
+    } catch (err: unknown) {
+      const proofError =
+        err instanceof AleoProofError
+          ? err
+          : new AleoProofError(
+              "unknown",
+              `Aleo proof generation failed unexpectedly: ${(err as Error)?.message ?? "unknown"}`
+            );
+
+      const mapped = ALEO_PROOF_ERRORS[proofError.code];
       setViewStep("error");
-      setStepMessage(classified.message);
-      setErrorMessage(classified.detailed);
-      setErrorAction("Check Aleo wallet authorization and try again.");
-      addEvent(`Aleo proof failed: ${classified.message}`);
+      setStepMessage(`Proof generation step failed - payment was received`);
+      setErrorMessage(`${mapped.title}. ${mapped.body}`);
+      setErrorAction(mapped.action + (mapped.showHardReload ? " If this persists, hard-reload (Ctrl+Shift+R)." : ""));
+      addEvent(`Aleo proof failed (${proofError.code}): ${proofError.message}`);
+      return;
     }
   };
 

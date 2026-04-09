@@ -1,4 +1,4 @@
-import { AleoConnectErrorCode } from "@/lib/aleo-wallet";
+import { AleoConnectErrorCode, AleoProofErrorCode } from "@/lib/aleo-wallet";
 import { SomniaPayErrorCode } from "@/lib/somnia-pay";
 
 export interface ErrorMessage {
@@ -108,6 +108,44 @@ export const SOMNIA_PAY_ERRORS: Record<SomniaPayErrorCode, ErrorMessage> = {
     title: "Transaction failed on-chain",
     body: "The payment transaction reverted for an unclassified reason.",
     action: "Open browser console (F12), copy tx hash and error details, and contact support.",
+    retryable: true,
+    showHardReload: false,
+  },
+};
+
+export const ALEO_PROOF_ERRORS: Record<AleoProofErrorCode, ErrorMessage> = {
+  invalid_address: {
+    title: "Aleo address not ready",
+    body: "Leo Wallet is connected but the Aleo address has not fully loaded yet.",
+    action: "Wait 2-3 seconds and click Retry. Do not reconnect wallets; your payment is safe.",
+    retryable: true,
+    showHardReload: false,
+  },
+  sdk_unavailable: {
+    title: "Leo Wallet SDK unavailable",
+    body: "The proof execution method is missing from the current Leo adapter session.",
+    action: "Hard-reload the page (Ctrl+Shift+R), reconnect Leo Wallet, and retry.",
+    retryable: false,
+    showHardReload: true,
+  },
+  execution_failed: {
+    title: "Aleo proof execution failed",
+    body: "Leo Wallet could not complete the proof execution request.",
+    action: "Check Leo Wallet Connected Sites authorization for this domain, then click Retry.",
+    retryable: true,
+    showHardReload: false,
+  },
+  bad_record_shape: {
+    title: "Proof output format unrecognized",
+    body: "Proof output did not match known formats for this app.",
+    action: "Open browser console and copy [normalizeProofRecord] logs for support. Payment remains safe.",
+    retryable: false,
+    showHardReload: false,
+  },
+  unknown: {
+    title: "Aleo proof generation failed",
+    body: "Unexpected proof-generation error occurred after payment.",
+    action: "Open browser console (F12), copy the full error, and contact support with the tx hash.",
     retryable: true,
     showHardReload: false,
   },
