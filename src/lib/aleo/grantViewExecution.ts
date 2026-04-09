@@ -2,6 +2,7 @@ import { Transaction, WalletAdapterNetwork } from "@demox-labs/aleo-wallet-adapt
 import type { AleoTransaction } from "@demox-labs/aleo-wallet-adapter-base";
 import { ProofError, ProofLayerError } from "@/lib/aleo/proofErrors";
 
+type TransactionRequester = (transaction: AleoTransaction) => Promise<unknown>;
 type ExecutionRequester = (transaction: AleoTransaction) => Promise<unknown>;
 
 export interface GrantViewExecutionParams {
@@ -9,7 +10,8 @@ export interface GrantViewExecutionParams {
   programId: string;
   videoId: number;
   tokenId: string;
-  requestExecution: ExecutionRequester;
+  requestExecution?: ExecutionRequester;
+  requestTransaction?: TransactionRequester;
 }
 
 export interface GrantViewExecutionResult {
@@ -46,7 +48,7 @@ function extractTransactionId(raw: unknown): string | null {
 export async function grantViewExecution(
   params: GrantViewExecutionParams
 ): Promise<GrantViewExecutionResult> {
-  const { publicKey, programId, videoId, tokenId, requestExecution } = params;
+  const { publicKey, programId, videoId, tokenId, requestExecution, requestTransaction } = params;
 
   if (!publicKey || !publicKey.startsWith("aleo1")) {
     throw new ProofLayerError(
@@ -80,7 +82,21 @@ export async function grantViewExecution(
 
   const networkConst = WalletAdapterNetwork.TestnetBeta;
   const functionName = "grant_view";
-  const fee = 0;
+  const fee = 0.28;
+
+  const requestTx = {
+    address: publicKey,
+    chainId: "testnetbeta",
+    transitions: [
+      {
+        program: programId,
+        functionName,
+        inputs: grantInputs,
+      },
+    ],
+    fee,
+    feePrivate: false,
+  };
 
   const tx = Transaction.createTransaction(
     publicKey,
@@ -97,9 +113,10 @@ export async function grantViewExecution(
   console.log("network:", networkConst);
   console.log("fee:", fee);
   console.log("inputs (raw):", JSON.stringify(grantInputs, null, 2));
+  console.log("requestTx:", JSON.stringify(requestTx, null, 2));
   console.groupEnd();
 
-  console.group("[grantViewExecution] step-3 requestExecution");
+  console.group("[grantViewExecution] step-3 wallet request");
   try {
     const txProbe = tx as unknown as {
       programId?: string;
@@ -129,8 +146,51 @@ export async function grantViewExecution(
     console.log("inputs (raw):", JSON.stringify(probeInputs, null, 2));
     console.groupEnd();
 
-    const executionRaw = await requestExecution(tx);
-    console.log("requestExecution raw:", executionRaw);
+    let walletRaw: unknown;
+    let lastError: unknown;
+
+    if (typeof requestTransaction === "function") {
+      try {
+        walletRaw = await requestTransaction(requestTx as unknown as AleoTransaction);
+        console.log("requestTransaction raw:", walletRaw);
+      } catch (error) {
+        lastError = error;
+        console.warn("requestTransaction failed:", error);
+      }
+    }
+
+    if (!walletRaw && typeof requestExecution === "function") {
+      try {
+        walletRaw = await requestExecution(requestTx as unknown as AleoTransaction);
+        console.log("requestExecution(rawTx) raw:", walletRaw);
+      } catch (error) {
+        lastError = error;
+        console.warn("requestExecution(rawTx) failed:", error);
+      }
+    }
+
+    if (!walletRaw && typeof requestExecution === "function") {
+      try {
+        walletRaw = await requestExecution(tx);
+        console.log("requestExecution(sdkTx) raw:", walletRaw);
+      } catch (error) {
+        lastError = error;
+        console.warn("requestExecution(sdkTx) failed:", error);
+      }
+    }
+
+    if (!walletRaw) {
+      throw new ProofLayerError(
+        ProofError.PROOF_CALL_FAILED,
+        `[grantViewExecution:step-3] Wallet request failed: ${
+          lastError instanceof Error ? lastError.message : String(lastError ?? "No wallet method available")
+        }`,
+        3,
+        lastError
+      );
+    }
+
+    const executionRaw = walletRaw;
     const transactionId = extractTransactionId(executionRaw);
 
     if (!transactionId) {

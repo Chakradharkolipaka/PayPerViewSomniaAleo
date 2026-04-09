@@ -58,7 +58,7 @@ export default function VideoWatchPage({ params }: { params: { videoId: string }
   // Somnia wallet (via wagmi)
   const { address: somniaAddress, isConnected: somniaConnected, chainId } = useAccount();
   const { switchChainAsync } = useSwitchChain();
-  const { requestExecution } = useWallet();
+  const { requestExecution, requestTransaction } = useWallet();
 
   // Aleo + Somnia state management
   const {
@@ -215,6 +215,15 @@ export default function VideoWatchPage({ params }: { params: { videoId: string }
     }
 
     if (
+      lowered.includes("wallettransactionerror") ||
+      lowered.includes("requestexecution failed") ||
+      lowered.includes("unknown error occurred") ||
+      lowered.includes("transaction error")
+    ) {
+      return new AleoProofError("execution_failed", rawMessage);
+    }
+
+    if (
       lowered.includes("no plaintext access record") ||
       lowered.includes("record format") ||
       lowered.includes("unrecognized")
@@ -349,7 +358,7 @@ export default function VideoWatchPage({ params }: { params: { videoId: string }
       setErrorAction("");
       addEvent("Starting Aleo proof generation");
 
-        if (typeof requestExecution !== "function") {
+      if (typeof requestExecution !== "function" && typeof requestTransaction !== "function") {
         throw new AleoProofError("sdk_unavailable", "Leo Wallet SDK execution methods are unavailable.");
       }
 
@@ -357,9 +366,10 @@ export default function VideoWatchPage({ params }: { params: { videoId: string }
         grantViewExecution({
           publicKey: aleoAddress,
           programId: aleoProgramId,
-            videoId,
-            tokenId,
+          videoId,
+          tokenId,
           requestExecution,
+          requestTransaction,
         });
 
       const { transactionId } = await runGrantView();
