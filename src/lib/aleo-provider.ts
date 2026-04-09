@@ -16,6 +16,7 @@ type AleoProvider = {
     transition: string;
     inputs: string[];
   }) => Promise<unknown>;
+  requestExecution?: (transaction: unknown) => Promise<unknown>;
   provider?: unknown;
   adapter?: unknown;
   wallet?: unknown;
@@ -177,7 +178,11 @@ function canConnect(provider: AleoProvider): boolean {
 }
 
 function hasCiphertextSupport(provider: AleoProvider): boolean {
-  return typeof provider.requestCiphertext === "function" || typeof provider.request === "function";
+  return (
+    typeof provider.requestCiphertext === "function" ||
+    typeof provider.requestExecution === "function" ||
+    typeof provider.request === "function"
+  );
 }
 
 function normalizeCandidate(candidate: unknown): AleoProvider | null {
@@ -199,6 +204,34 @@ function normalizeCandidate(candidate: unknown): AleoProvider | null {
 
     // Common nested wrappers from wallet adapters/extensions.
     queue.push(provider.provider, provider.adapter, provider.wallet, provider.aleo, provider.leo);
+  }
+
+  return null;
+}
+
+function extractExecutionId(value: unknown, depth = 0): string | null {
+  if (depth > 4) return null;
+
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed ? trimmed : null;
+  }
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const extracted = extractExecutionId(item, depth + 1);
+      if (extracted) return extracted;
+    }
+    return null;
+  }
+
+  if (!isRecord(value)) return null;
+
+  const preferredKeys = ["transactionId", "txId", "id", "result", "data"];
+  for (const key of preferredKeys) {
+    if (!(key in value)) continue;
+    const extracted = extractExecutionId(value[key], depth + 1);
+    if (extracted) return extracted;
   }
 
   return null;
@@ -434,11 +467,69 @@ export async function requestAleoCiphertext(payload: {
 
   if (typeof provider.requestCiphertext === "function") {
     record = await provider.requestCiphertext(payload);
+  } else if (typeof provider.requestExecution === "function") {
+    // Leo adapter-based wallets can expose requestExecution instead of requestCiphertext.
+    const executionRequest = {
+      address: payload.inputs[0] || "",
+      chainId: "testnetbeta",
+      transitions: [
+        {
+          program: payload.program,
+          functionName: payload.transition,
+          inputs: payload.inputs,
+        },
+      ],
+      fee: 0.28,
+      feePrivate: false,
+    };
+
+    const executionResult = await provider.requestExecution(executionRequest);
+    const executionId = extractExecutionId(executionResult);
+    if (executionId) {
+      return `aleo_execution:${executionId}`;
+    }
+
+    record = executionResult;
   } else {
     record =
       (await requestWithMethod(provider, "requestCiphertext", [payload])) ??
       (await requestWithMethod(provider, "aleo_requestCiphertext", [payload])) ??
-      (await requestWithMethod(provider, "request_ciphertext", [payload]));
+      (await requestWithMethod(provider, "request_ciphertext", [payload])) ??
+      (await requestWithMethod(provider, "requestExecution", [
+        {
+          address: payload.inputs[0] || "",
+          chainId: "testnetbeta",
+          transitions: [
+            {
+              program: payload.program,
+              functionName: payload.transition,
+              inputs: payload.inputs,
+            },
+          ],
+          fee: 0.28,
+          feePrivate: false,
+        },
+      ])) ??
+      (await requestWithMethod(provider, "aleo_requestExecution", [
+        {
+          address: payload.inputs[0] || "",
+          chainId: "testnetbeta",
+          transitions: [
+            {
+              program: payload.program,
+              functionName: payload.transition,
+              inputs: payload.inputs,
+            },
+          ],
+          fee: 0.28,
+          feePrivate: false,
+        },
+      ]));
+
+    const executionId = extractExecutionId(record);
+    if (executionId) {
+      return `aleo_execution:${executionId}`;
+    }
   }
 
   const ciphertext = extractCiphertext(record);
