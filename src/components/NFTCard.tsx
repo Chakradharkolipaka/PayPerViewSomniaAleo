@@ -19,8 +19,8 @@ interface NFTCardProps {
 
 export default function NFTCard({ video }: NFTCardProps) {
   return (
-    <Card className="group h-full border-slate-200/80 transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_18px_60px_-26px_rgba(59,130,246,0.55)]">
-      <CardHeader className="space-y-3">
+    <Card className="group h-full min-h-[360px] border-slate-200/80 transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_18px_60px_-26px_rgba(59,130,246,0.55)]">
+      <CardHeader className="space-y-4 pb-3">
         <div className="flex items-center justify-between">
           <div className="inline-flex items-center gap-2 rounded-full border border-blue-200/70 bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">
             <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-blue-600 text-[11px] font-bold text-white">
@@ -37,8 +37,8 @@ export default function NFTCard({ video }: NFTCardProps) {
           <CardDescription>Creator: {video.creator.slice(0, 8)}...</CardDescription>
         </div>
       </CardHeader>
-      <CardContent className="space-y-4">
-        <p className="line-clamp-2 text-sm text-muted-foreground">{video.description}</p>
+      <CardContent className="flex h-full flex-col justify-between space-y-5 pb-6">
+        <p className="min-h-[48px] line-clamp-3 text-sm text-muted-foreground">{video.description}</p>
         <div className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2 text-xs">
           <span className="font-medium text-slate-600">Price</span>
           <span className="font-semibold text-slate-900">{video.priceSTT} STT</span>

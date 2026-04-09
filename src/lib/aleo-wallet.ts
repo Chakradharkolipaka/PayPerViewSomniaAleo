@@ -1,3 +1,5 @@
+import { requestAleoCiphertext } from "@/lib/aleo-provider";
+
 /**
  * src/lib/aleo-wallet.ts
  * Wrapper around Aleo SDK for ViewToken lifecycle (grant_view / consume_view).
@@ -30,15 +32,9 @@ export async function grantViewToken(
   tokenId: bigint
 ): Promise<string> {
   try {
-    // Aleo wallet injected as window.aleo_appName
-    const aleoWallet = (window as any).aleo_appName;
-    if (!aleoWallet?.requestCiphertext) {
-      throw new Error("Aleo wallet not found. Install and unlock the Aleo wallet extension.");
-    }
-
     // Call grant_view via Aleo SDK / Wallet integration
     // The wallet handles the proof internally and returns the record ciphertext
-    const record = await aleoWallet.requestCiphertext({
+    const record = await requestAleoCiphertext({
       program: programId,
       transition: "grant_view",
       inputs: [viewerAddress, videoId.toString(), tokenId.toString()],
@@ -67,13 +63,8 @@ export async function grantViewToken(
  */
 export async function consumeViewToken(programId: string, tokenRecord: string): Promise<string> {
   try {
-    const aleoWallet = (window as any).aleo_appName;
-    if (!aleoWallet?.requestCiphertext) {
-      throw new Error("Aleo wallet not found. Install and unlock the Aleo wallet extension.");
-    }
-
     // Call consume_view on the token
-    const consumed = await aleoWallet.requestCiphertext({
+    const consumed = await requestAleoCiphertext({
       program: programId,
       transition: "consume_view",
       inputs: [tokenRecord],

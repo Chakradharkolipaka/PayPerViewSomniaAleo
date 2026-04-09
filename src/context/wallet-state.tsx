@@ -3,6 +3,7 @@
 import React, { createContext, useCallback, useContext, useMemo, useState } from "react";
 import { useAccount, useSwitchChain } from "wagmi";
 import { SOMNIA_CHAIN_ID } from "@/constants";
+import { requestAleoAccount } from "@/lib/aleo-provider";
 
 /**
  * Dual-wallet state management for PPV:
@@ -69,13 +70,7 @@ export function WalletStateProvider({ children }: { children: React.ReactNode })
   const connectAleo = useCallback(async () => {
     try {
       addEvent("Connecting Aleo wallet...");
-      const aleoWallet = (window as any).aleo_appName;
-      if (!aleoWallet) {
-        throw new Error("Aleo wallet not found. Install the Aleo wallet browser extension.");
-      }
-
-      // Request user to connect
-      const response = await aleoWallet.requestAccount();
+      const response = await requestAleoAccount();
       setAleoAddress(response);
       setAleoConnected(true);
       setAleoError(undefined);
