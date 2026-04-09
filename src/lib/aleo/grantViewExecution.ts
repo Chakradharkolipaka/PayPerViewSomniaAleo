@@ -135,6 +135,34 @@ export async function grantViewExecution(
 
   console.group("[grantViewExecution] step-3 requestExecution");
   try {
+    const txProbe = tx as unknown as {
+      programId?: string;
+      functionName?: string;
+      network?: string;
+      fee?: number;
+      inputs?: unknown[];
+      transitions?: Array<{ program?: string; functionName?: string; inputs?: unknown[] }>;
+    };
+
+    const probeProgramId = txProbe.programId ?? txProbe.transitions?.[0]?.program;
+    const probeFunctionName = txProbe.functionName ?? txProbe.transitions?.[0]?.functionName;
+    const probeNetwork = txProbe.network ?? (tx as unknown as { chainId?: string }).chainId;
+    const probeInputs = txProbe.inputs ?? txProbe.transitions?.[0]?.inputs ?? [];
+    const probeInput0 = probeInputs[0] as Record<string, unknown> | undefined;
+
+    console.group("🔍 ALEO_PROBE_CRITICAL");
+    console.log("Network Constant:", probeNetwork);
+    console.log("Function Name:", probeFunctionName);
+    console.log("Fee:", txProbe.fee ?? fee);
+    console.log("Input Type:", typeof probeInputs[0]);
+    console.log("Input Owner:", probeInput0?.owner);
+    console.log("program_id:", probeProgramId);
+    console.log("function:", probeFunctionName);
+    console.log("network:", probeNetwork);
+    console.log("fee:", txProbe.fee ?? fee);
+    console.log("inputs (raw):", JSON.stringify(probeInputs, null, 2));
+    console.groupEnd();
+
     const executionRaw = await requestExecution(tx);
     console.log("requestExecution raw:", executionRaw);
     const transactionId = extractTransactionId(executionRaw);
