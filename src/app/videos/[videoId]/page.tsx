@@ -22,12 +22,13 @@ import {
   accessNftAbi,
 } from "@/constants";
 import { useWallet } from "@demox-labs/aleo-wallet-adapter-react";
-import { AleoConnectError, AleoProofError, grantViewToken } from "@/lib/aleo-wallet";
+import { AleoConnectError, AleoProofError } from "@/lib/aleo-wallet";
 import { decryptAndPlay } from "@/lib/decrypt";
 import { classifyError } from "@/lib/ppv-errors";
 import { ALEO_ERRORS, ALEO_PROOF_ERRORS, SOMNIA_PAY_ERRORS } from "@/lib/error-messages";
 import { callPayForVideo, SomniaPayError } from "@/lib/somnia-pay";
 import { runPreFlightChecks } from "@/lib/preflight";
+import { grantViewExecution } from "@/lib/aleo/grantViewExecution";
 import { ethers } from "ethers";
 
 type ViewStep =
@@ -56,7 +57,7 @@ export default function VideoWatchPage({ params }: { params: { videoId: string }
   // Somnia wallet (via wagmi)
   const { address: somniaAddress, isConnected: somniaConnected, chainId } = useAccount();
   const { switchChainAsync } = useSwitchChain();
-  const { requestExecution } = useWallet();
+  const { requestExecution, requestRecordPlaintexts } = useWallet();
 
   // Aleo + Somnia state management
   const {
@@ -297,20 +298,23 @@ export default function VideoWatchPage({ params }: { params: { videoId: string }
       setErrorAction("");
       addEvent("Starting Aleo proof generation");
 
-      const programId = process.env.NEXT_PUBLIC_ALEO_PROGRAM_ID || "video_access_testnet";
-      const viewTokenRecord = await grantViewToken(
-        programId,
-        aleoAddress,
-        videoId,
-        BigInt(tokenId),
-        requestExecution
-      );
+      const programId = process.env.NEXT_PUBLIC_ALEO_PROGRAM_ID || "video_access_testnet.aleo";
+      if (typeof requestExecution !== "function" || typeof requestRecordPlaintexts !== "function") {
+        throw new AleoProofError("sdk_unavailable", "Leo Wallet SDK execution methods are unavailable.");
+      }
 
-      setLastAleoProofId(viewTokenRecord.slice(0, 32));
-      addEvent(`Aleo proof generated: ${viewTokenRecord.slice(0, 16)}...`);
+      const { transactionId } = await grantViewExecution({
+        publicKey: aleoAddress,
+        programId,
+        requestExecution,
+        requestRecordPlaintexts,
+      });
+
+      setLastAleoProofId(transactionId.slice(0, 32));
+      addEvent(`Aleo proof generated tx: ${transactionId.slice(0, 16)}...`);
 
       // Step 3: Call backend verify-and-serve
-      await handleVerifyAndServe(viewTokenRecord);
+      await handleVerifyAndServe(transactionId);
     } catch (err: unknown) {
       const proofError =
         err instanceof AleoProofError

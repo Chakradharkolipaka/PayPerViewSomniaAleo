@@ -1,8 +1,9 @@
 import { Transaction, WalletAdapterNetwork } from "@demox-labs/aleo-wallet-adapter-base";
+import type { AleoTransaction } from "@demox-labs/aleo-wallet-adapter-base";
 import { ProofError, ProofLayerError } from "@/lib/aleo/proofErrors";
 
 type RecordPlaintextRequester = (programId: string) => Promise<unknown>;
-type ExecutionRequester = (transaction: unknown) => Promise<unknown>;
+type ExecutionRequester = (transaction: AleoTransaction) => Promise<unknown>;
 
 export interface GrantViewExecutionParams {
   publicKey: string | null | undefined;
