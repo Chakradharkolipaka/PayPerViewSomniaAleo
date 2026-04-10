@@ -318,7 +318,7 @@ export async function grantViewExecution(
 
   const networkConst = WalletAdapterNetwork.TestnetBeta;
   const functionName = "grant_view";
-  const fee = 1000;
+  const fee = Number.parseInt(process.env.NEXT_PUBLIC_ALEO_PROOF_FEE_MICROCREDITS || "280000", 10);
 
   const createRequestTx = (chainId: string) => ({
     address: publicKey,

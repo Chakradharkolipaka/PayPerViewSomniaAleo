@@ -180,6 +180,21 @@ export default function VideoWatchPage({ params }: { params: { videoId: string }
   const explorerUrl = "https://explorer.somnia.network/";
 
   const createProofTraceId = () => `proof_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+  const readHydratedAleoAddress = () => {
+    const fromState = aleoAddress?.trim();
+    if (fromState && fromState.startsWith("aleo1")) {
+      return fromState;
+    }
+
+    if (typeof window !== "undefined") {
+      const fromWindow = (window as Window & { __aleoPublicKey?: string }).__aleoPublicKey?.trim();
+      if (fromWindow && fromWindow.startsWith("aleo1")) {
+        return fromWindow;
+      }
+    }
+
+    return "";
+  };
 
   const isRecordPermissionError = (message: string) => {
     const lowered = message.toLowerCase();
@@ -212,7 +227,7 @@ export default function VideoWatchPage({ params }: { params: { videoId: string }
     }
 
     if (
-      lowered.includes("sdk") ||
+      lowered.includes("sdk unavailable") ||
       lowered.includes("not a function") ||
       lowered.includes("execution methods are unavailable")
     ) {
@@ -360,9 +375,15 @@ export default function VideoWatchPage({ params }: { params: { videoId: string }
    * Step 2: Grant View Token (Aleo)
    */
   const handleGenerateALeoProof = async () => {
-    const normalizedAleoAddress = aleoAddress?.trim();
+    let normalizedAleoAddress = readHydratedAleoAddress();
     const normalizedTokenId = tokenId.trim();
     const proofTraceId = createProofTraceId();
+
+    if (!normalizedAleoAddress) {
+      addEvent("Aleo address not hydrated yet. Waiting 2 seconds before first proof attempt...");
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      normalizedAleoAddress = readHydratedAleoAddress();
+    }
 
     if (!normalizedAleoAddress || !normalizedTokenId) {
       const mapped = ALEO_PROOF_ERRORS.invalid_address;
