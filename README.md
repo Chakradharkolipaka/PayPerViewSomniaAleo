@@ -1,6 +1,5 @@
 # Somnia + Aleo One-Time Pay-Per-View
 
-
 This app implements a fixed-price, single-view architecture:
 
 - User pays exactly `0.005 STT` on Somnia
