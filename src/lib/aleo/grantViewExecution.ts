@@ -316,42 +316,56 @@ export async function grantViewExecution(
 
   const grantInputs = [publicKey, `${videoId}field`, `${normalizedTokenId}u64`];
 
+  const programIdCandidates = Array.from(
+    new Set(
+      [
+        programId,
+        programId.replace(/_testnet(?=\.aleo$)/, ""),
+        programId.endsWith(".aleo") ? programId.replace(/\.aleo$/, "_testnet.aleo") : `${programId}_testnet.aleo`,
+      ].map((candidate) => candidate.trim()).filter(Boolean)
+    )
+  );
+
   const networkConst = WalletAdapterNetwork.TestnetBeta;
   const functionName = "grant_view";
   const fee = Number.parseInt(process.env.NEXT_PUBLIC_ALEO_PROOF_FEE_MICROCREDITS || "280000", 10);
 
-  const createRequestTx = (chainId: string) => ({
+  const createRequestTx = (chainId: string, selectedProgramId: string, feePrivate = false) => ({
     address: publicKey,
     chainId,
     transitions: [
       {
-        program: programId,
+        program: selectedProgramId,
         functionName,
         inputs: grantInputs,
       },
     ],
     fee,
-    feePrivate: false,
+    feePrivate,
   });
 
-  const tx = Transaction.createTransaction(
-    publicKey,
-    networkConst,
-    programId,
-    functionName,
-    grantInputs,
-    fee
-  );
+  const createSdkTx = (selectedProgramId: string, selectedNetwork: WalletAdapterNetwork) =>
+    Transaction.createTransaction(
+      publicKey,
+      selectedNetwork,
+      selectedProgramId,
+      functionName,
+      grantInputs,
+      fee
+    );
+
+  const tx = createSdkTx(programIdCandidates[0] || programId, networkConst);
 
   console.group("GRANT_VIEW_PROBE");
   console.log("program_id:", programId);
+  console.log("program_candidates:", programIdCandidates);
   console.log("function:", functionName);
   console.log("network:", networkConst);
   console.log("fee:", fee);
   console.log("trace_id:", traceId);
   console.log("strict_first_mismatch:", STRICT_FIRST_MISMATCH);
   console.log("inputs (raw):", JSON.stringify(grantInputs, null, 2));
-  console.log("requestTx (testnetbeta):", JSON.stringify(createRequestTx("testnetbeta"), null, 2));
+  console.log("requestTx (testnetbeta):", JSON.stringify(createRequestTx("testnetbeta", programIdCandidates[0] || programId), null, 2));
   console.groupEnd();
 
   console.group("[grantViewExecution] step-3 wallet request");
@@ -418,65 +432,72 @@ export async function grantViewExecution(
     const attemptErrors: string[] = [];
 
     const attemptMatrix: Array<{ label: string; run: () => Promise<unknown> }> = [];
-    const requestTxTestnetBeta = createRequestTx("testnetbeta");
-    const requestTxTestnet = createRequestTx("testnet");
-    const requestTxAleoTestnetBeta = createRequestTx("aleo:testnetbeta");
+    const chainIdCandidates = ["testnetbeta", "testnet3", "testnet", "aleo:testnetbeta"];
 
-    if (typeof requestTransaction === "function") {
-      attemptMatrix.push({
-        label: "requestTransaction(sdkTx)",
-        run: () => requestTransaction(tx),
-      });
-      attemptMatrix.push({
-        label: "requestTransaction(raw,chainId=testnetbeta)",
-        run: () => requestTransaction(requestTxTestnetBeta as unknown as AleoTransaction),
-      });
-      attemptMatrix.push({
-        label: "requestTransaction(raw,chainId=testnet)",
-        run: () => requestTransaction(requestTxTestnet as unknown as AleoTransaction),
-      });
-      attemptMatrix.push({
-        label: "requestTransaction(raw,chainId=aleo:testnetbeta)",
-        run: () => requestTransaction(requestTxAleoTestnetBeta as unknown as AleoTransaction),
-      });
+    for (const selectedProgramId of programIdCandidates) {
+      const sdkTxTestnetBeta = createSdkTx(selectedProgramId, WalletAdapterNetwork.TestnetBeta);
+      const sdkTxTestnet3 = createSdkTx(selectedProgramId, WalletAdapterNetwork.Testnet);
+
+      for (const [sdkLabel, sdkTx] of [
+        ["sdkTx(network=testnetbeta)", sdkTxTestnetBeta],
+        ["sdkTx(network=testnet3)", sdkTxTestnet3],
+      ] as const) {
+        if (typeof requestTransaction === "function") {
+          attemptMatrix.push({
+            label: `requestTransaction(${sdkLabel},program=${selectedProgramId})`,
+            run: () => requestTransaction(sdkTx),
+          });
+        }
+        if (typeof requestExecution === "function") {
+          attemptMatrix.push({
+            label: `requestExecution(${sdkLabel},program=${selectedProgramId})`,
+            run: () => requestExecution(sdkTx),
+          });
+        }
+
+        attemptMatrix.push({
+          label: `provider.requestTransaction(${sdkLabel},program=${selectedProgramId})`,
+          run: () => runProviderMethod(provider, "requestTransaction", sdkTx),
+        });
+        attemptMatrix.push({
+          label: `provider.requestExecution(${sdkLabel},program=${selectedProgramId})`,
+          run: () => runProviderMethod(provider, "requestExecution", sdkTx),
+        });
+      }
+
+      for (const chainId of chainIdCandidates) {
+        const rawTxPublicFee = createRequestTx(chainId, selectedProgramId, false);
+        const rawTxPrivateFee = createRequestTx(chainId, selectedProgramId, true);
+
+        for (const [feeLabel, rawTx] of [
+          ["feePrivate=false", rawTxPublicFee],
+          ["feePrivate=true", rawTxPrivateFee],
+        ] as const) {
+          if (typeof requestTransaction === "function") {
+            attemptMatrix.push({
+              label: `requestTransaction(raw,chainId=${chainId},${feeLabel},program=${selectedProgramId})`,
+              run: () => requestTransaction(rawTx as unknown as AleoTransaction),
+            });
+          }
+          if (typeof requestExecution === "function") {
+            attemptMatrix.push({
+              label: `requestExecution(raw,chainId=${chainId},${feeLabel},program=${selectedProgramId})`,
+              run: () => requestExecution(rawTx as unknown as AleoTransaction),
+            });
+          }
+
+          // Provider-level fallbacks cover sessions where adapter hooks are stale or methods are missing.
+          attemptMatrix.push({
+            label: `provider.requestTransaction(raw,chainId=${chainId},${feeLabel},program=${selectedProgramId})`,
+            run: () => runProviderMethod(provider, "requestTransaction", rawTx),
+          });
+          attemptMatrix.push({
+            label: `provider.requestExecution(raw,chainId=${chainId},${feeLabel},program=${selectedProgramId})`,
+            run: () => runProviderMethod(provider, "requestExecution", rawTx),
+          });
+        }
+      }
     }
-
-    if (typeof requestExecution === "function") {
-      attemptMatrix.push({
-        label: "requestExecution(sdkTx)",
-        run: () => requestExecution(tx),
-      });
-      attemptMatrix.push({
-        label: "requestExecution(raw,chainId=testnetbeta)",
-        run: () => requestExecution(requestTxTestnetBeta as unknown as AleoTransaction),
-      });
-      attemptMatrix.push({
-        label: "requestExecution(raw,chainId=testnet)",
-        run: () => requestExecution(requestTxTestnet as unknown as AleoTransaction),
-      });
-      attemptMatrix.push({
-        label: "requestExecution(raw,chainId=aleo:testnetbeta)",
-        run: () => requestExecution(requestTxAleoTestnetBeta as unknown as AleoTransaction),
-      });
-    }
-
-    // Provider-level fallbacks cover sessions where adapter hooks are stale or methods are missing.
-    attemptMatrix.push({
-      label: "provider.requestTransaction(sdkTx)",
-      run: () => runProviderMethod(provider, "requestTransaction", tx),
-    });
-    attemptMatrix.push({
-      label: "provider.requestExecution(sdkTx)",
-      run: () => runProviderMethod(provider, "requestExecution", tx),
-    });
-    attemptMatrix.push({
-      label: "provider.requestTransaction(raw,chainId=testnetbeta)",
-      run: () => runProviderMethod(provider, "requestTransaction", requestTxTestnetBeta),
-    });
-    attemptMatrix.push({
-      label: "provider.requestExecution(raw,chainId=testnetbeta)",
-      run: () => runProviderMethod(provider, "requestExecution", requestTxTestnetBeta),
-    });
 
     for (const attempt of attemptMatrix) {
       try {

@@ -52,7 +52,7 @@ type VideoMeta = {
 
 export default function VideoWatchPage({ params }: { params: { videoId: string } }) {
   const videoId = Number(params.videoId);
-  const configuredProgramId = process.env.NEXT_PUBLIC_ALEO_PROGRAM_ID || "video_access_testnet.aleo";
+  const configuredProgramId = process.env.NEXT_PUBLIC_ALEO_PROGRAM_ID || "video_access.aleo";
   const aleoProgramId = configuredProgramId.endsWith(".aleo")
     ? configuredProgramId
     : `${configuredProgramId}.aleo`;
@@ -61,7 +61,7 @@ export default function VideoWatchPage({ params }: { params: { videoId: string }
   // Somnia wallet (via wagmi)
   const { address: somniaAddress, isConnected: somniaConnected, chainId } = useAccount();
   const { switchChainAsync } = useSwitchChain();
-  const { requestExecution, requestTransaction } = useWallet();
+  const { requestExecution, requestTransaction, publicKey: walletPublicKey } = useWallet();
 
   // Aleo + Somnia state management
   const {
@@ -181,6 +181,11 @@ export default function VideoWatchPage({ params }: { params: { videoId: string }
 
   const createProofTraceId = () => `proof_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
   const readHydratedAleoAddress = () => {
+    const fromWallet = walletPublicKey?.trim();
+    if (fromWallet && fromWallet.startsWith("aleo1")) {
+      return fromWallet;
+    }
+
     const fromState = aleoAddress?.trim();
     if (fromState && fromState.startsWith("aleo1")) {
       return fromState;
