@@ -419,6 +419,13 @@ export async function grantViewExecution(
         { traceId, category, attemptErrors }
       );
     }
+
+    throw new ProofLayerError(
+      ProofError.PROOF_CALL_FAILED,
+      `[grantViewExecution:step-3][trace:${traceId}] unknown: wallet response could not be resolved to a transaction id.`,
+      3,
+      { traceId }
+    );
   } catch (error) {
     if (error instanceof ProofLayerError) {
       throw error;
