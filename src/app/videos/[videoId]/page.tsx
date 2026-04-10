@@ -383,7 +383,7 @@ export default function VideoWatchPage({ params }: { params: { videoId: string }
       addEvent(`Proof trace: ${proofTraceId}`);
 
       if (typeof requestExecution !== "function" && typeof requestTransaction !== "function") {
-        throw new AleoProofError("sdk_unavailable", "Leo Wallet SDK execution methods are unavailable.");
+        addEvent("Aleo adapter methods unavailable; trying provider-level wallet fallbacks.");
       }
 
       const runGrantView = async () =>

@@ -23,6 +23,7 @@ export interface GrantViewExecutionResult {
 const REMOTE_PROVER_URL = process.env.NEXT_PUBLIC_ALEO_REMOTE_PROVER_URL?.trim();
 const PROVER_MODE =
   ((process.env.NEXT_PUBLIC_ALEO_PROVER_MODE || "local_only").toLowerCase() as ProverMode) || "local_only";
+const STRICT_FIRST_MISMATCH = process.env.NEXT_PUBLIC_ALEO_STRICT_FIRST_MISMATCH === "true";
 
 function createTraceId(): string {
   return `proof_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
@@ -69,6 +70,50 @@ function classifyWalletFailure(messages: string[]): string {
   return "unknown";
 }
 
+function classifyWalletFailureFromMessage(message: string): string {
+  const lowered = message.toLowerCase();
+
+  if (
+    lowered.includes("unknown error occured") ||
+    lowered.includes("unknown error occurred") ||
+    lowered.includes("wallettransactionerror")
+  ) {
+    return "adapter_incompatibility";
+  }
+
+  if (lowered.includes("network") || lowered.includes("chain")) {
+    return "network_mismatch";
+  }
+
+  if (lowered.includes("program") || lowered.includes("function")) {
+    return "program_mismatch";
+  }
+
+  if (lowered.includes("input") || lowered.includes("format") || lowered.includes("u64") || lowered.includes("field")) {
+    return "input_mismatch";
+  }
+
+  if (lowered.includes("payload") || lowered.includes("transition") || lowered.includes("schema")) {
+    return "payload_schema_mismatch";
+  }
+
+  if (lowered.includes("permission") || lowered.includes("authorize") || lowered.includes("denied")) {
+    return "permission_auth_issue";
+  }
+
+  return "unknown";
+}
+
+function isDefinitiveMismatch(category: string): boolean {
+  return (
+    category === "network_mismatch" ||
+    category === "program_mismatch" ||
+    category === "input_mismatch" ||
+    category === "payload_schema_mismatch" ||
+    category === "permission_auth_issue"
+  );
+}
+
 function getWalletProvider(): Record<string, unknown> | null {
   if (typeof window === "undefined") {
     return null;
@@ -83,6 +128,23 @@ function getWalletProvider(): Record<string, unknown> | null {
   }
 
   return null;
+}
+
+async function runProviderMethod(
+  provider: Record<string, unknown> | null,
+  methodName: string,
+  payload: unknown
+): Promise<unknown> {
+  if (!provider) {
+    throw new Error("wallet_provider_unavailable");
+  }
+
+  const method = provider[methodName];
+  if (typeof method !== "function") {
+    throw new Error(`${methodName}_unavailable`);
+  }
+
+  return await (method as (arg: unknown) => Promise<unknown>)(payload);
 }
 
 async function tryMethodVariants(
@@ -222,6 +284,7 @@ export async function grantViewExecution(
 ): Promise<GrantViewExecutionResult> {
   const { publicKey, programId, videoId, tokenId, requestExecution, requestTransaction } = params;
   const traceId = params.traceId?.trim() || createTraceId();
+  const provider = getWalletProvider();
 
   if (!publicKey || !publicKey.startsWith("aleo1")) {
     throw new ProofLayerError(
@@ -286,6 +349,7 @@ export async function grantViewExecution(
   console.log("network:", networkConst);
   console.log("fee:", fee);
   console.log("trace_id:", traceId);
+  console.log("strict_first_mismatch:", STRICT_FIRST_MISMATCH);
   console.log("inputs (raw):", JSON.stringify(grantInputs, null, 2));
   console.log("requestTx (testnetbeta):", JSON.stringify(createRequestTx("testnetbeta"), null, 2));
   console.groupEnd();
@@ -354,36 +418,65 @@ export async function grantViewExecution(
     const attemptErrors: string[] = [];
 
     const attemptMatrix: Array<{ label: string; run: () => Promise<unknown> }> = [];
+    const requestTxTestnetBeta = createRequestTx("testnetbeta");
+    const requestTxTestnet = createRequestTx("testnet");
+    const requestTxAleoTestnetBeta = createRequestTx("aleo:testnetbeta");
 
     if (typeof requestTransaction === "function") {
       attemptMatrix.push({
-        label: "requestTransaction(chainId=testnetbeta)",
-        run: () => requestTransaction(createRequestTx("testnetbeta") as unknown as AleoTransaction),
+        label: "requestTransaction(sdkTx)",
+        run: () => requestTransaction(tx),
       });
       attemptMatrix.push({
-        label: "requestTransaction(chainId=testnet)",
-        run: () => requestTransaction(createRequestTx("testnet") as unknown as AleoTransaction),
+        label: "requestTransaction(raw,chainId=testnetbeta)",
+        run: () => requestTransaction(requestTxTestnetBeta as unknown as AleoTransaction),
       });
       attemptMatrix.push({
-        label: "requestTransaction(chainId=aleo:testnetbeta)",
-        run: () => requestTransaction(createRequestTx("aleo:testnetbeta") as unknown as AleoTransaction),
+        label: "requestTransaction(raw,chainId=testnet)",
+        run: () => requestTransaction(requestTxTestnet as unknown as AleoTransaction),
+      });
+      attemptMatrix.push({
+        label: "requestTransaction(raw,chainId=aleo:testnetbeta)",
+        run: () => requestTransaction(requestTxAleoTestnetBeta as unknown as AleoTransaction),
       });
     }
 
     if (typeof requestExecution === "function") {
       attemptMatrix.push({
-        label: "requestExecution(raw,chainId=testnetbeta)",
-        run: () => requestExecution(createRequestTx("testnetbeta") as unknown as AleoTransaction),
-      });
-      attemptMatrix.push({
-        label: "requestExecution(raw,chainId=testnet)",
-        run: () => requestExecution(createRequestTx("testnet") as unknown as AleoTransaction),
-      });
-      attemptMatrix.push({
         label: "requestExecution(sdkTx)",
         run: () => requestExecution(tx),
       });
+      attemptMatrix.push({
+        label: "requestExecution(raw,chainId=testnetbeta)",
+        run: () => requestExecution(requestTxTestnetBeta as unknown as AleoTransaction),
+      });
+      attemptMatrix.push({
+        label: "requestExecution(raw,chainId=testnet)",
+        run: () => requestExecution(requestTxTestnet as unknown as AleoTransaction),
+      });
+      attemptMatrix.push({
+        label: "requestExecution(raw,chainId=aleo:testnetbeta)",
+        run: () => requestExecution(requestTxAleoTestnetBeta as unknown as AleoTransaction),
+      });
     }
+
+    // Provider-level fallbacks cover sessions where adapter hooks are stale or methods are missing.
+    attemptMatrix.push({
+      label: "provider.requestTransaction(sdkTx)",
+      run: () => runProviderMethod(provider, "requestTransaction", tx),
+    });
+    attemptMatrix.push({
+      label: "provider.requestExecution(sdkTx)",
+      run: () => runProviderMethod(provider, "requestExecution", tx),
+    });
+    attemptMatrix.push({
+      label: "provider.requestTransaction(raw,chainId=testnetbeta)",
+      run: () => runProviderMethod(provider, "requestTransaction", requestTxTestnetBeta),
+    });
+    attemptMatrix.push({
+      label: "provider.requestExecution(raw,chainId=testnetbeta)",
+      run: () => runProviderMethod(provider, "requestExecution", requestTxTestnetBeta),
+    });
 
     for (const attempt of attemptMatrix) {
       try {
@@ -391,8 +484,19 @@ export async function grantViewExecution(
         console.log(`${attempt.label} raw:`, walletRaw);
       } catch (error) {
         const message = normalizeErrorMessage(error);
-        attemptErrors.push(`${attempt.label}: ${message}`);
+        const attemptMessage = `${attempt.label}: ${message}`;
+        attemptErrors.push(attemptMessage);
         console.warn(`${attempt.label} failed:`, error);
+
+        const category = classifyWalletFailureFromMessage(message);
+        if (STRICT_FIRST_MISMATCH && isDefinitiveMismatch(category)) {
+          throw new ProofLayerError(
+            ProofError.PROOF_CALL_FAILED,
+            `[grantViewExecution:step-3][trace:${traceId}] ${category}: ${attemptMessage}`,
+            3,
+            { traceId, category, attemptErrors: [attemptMessage] }
+          );
+        }
       }
 
       if (walletRaw) {
