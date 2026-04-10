@@ -22,11 +22,21 @@ export async function POST(request: Request) {
     }
 
     const tokenId = body.tokenId;
-    const viewerAddress = body.viewerAddress || body.viewer;
+    const viewerAddressRaw = body.viewerAddress || body.viewer;
+    const viewerAddress = typeof viewerAddressRaw === "string" ? viewerAddressRaw.trim() : viewerAddressRaw;
+    const consumedAleoRecord =
+      typeof body.consumedAleoRecord === "string" ? body.consumedAleoRecord.trim() : body.consumedAleoRecord;
 
-    if (tokenId === undefined || tokenId === null || viewerAddress === undefined) {
+    if (tokenId === undefined || tokenId === null || viewerAddress === undefined || viewerAddress === "") {
       return NextResponse.json(
         { status: "error", message: "tokenId and viewerAddress are required." },
+        { status: 400 }
+      );
+    }
+
+    if (consumedAleoRecord !== undefined && consumedAleoRecord === "") {
+      return NextResponse.json(
+        { status: "error", message: "consumedAleoRecord cannot be empty when provided." },
         { status: 400 }
       );
     }
@@ -34,7 +44,7 @@ export async function POST(request: Request) {
     const result = await verifyAndServeAccess({
       tokenId,
       viewerAddress,
-      consumedAleoRecord: body.consumedAleoRecord,
+      consumedAleoRecord,
     });
 
     return NextResponse.json(result);

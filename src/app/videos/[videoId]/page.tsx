@@ -352,7 +352,18 @@ export default function VideoWatchPage({ params }: { params: { videoId: string }
    * Step 2: Grant View Token (Aleo)
    */
   const handleGenerateALeoProof = async () => {
-    if (!aleoAddress || !tokenId) return;
+    const normalizedAleoAddress = aleoAddress?.trim();
+    const normalizedTokenId = tokenId.trim();
+
+    if (!normalizedAleoAddress || !normalizedTokenId) {
+      const mapped = ALEO_PROOF_ERRORS.invalid_address;
+      setViewStep("error");
+      setStepMessage(mapped.title);
+      setErrorMessage(mapped.body);
+      setErrorAction(mapped.action);
+      addEvent("Aleo proof blocked: missing aleoAddress or tokenId");
+      return;
+    }
 
     try {
       setViewStep("proving");
@@ -367,10 +378,10 @@ export default function VideoWatchPage({ params }: { params: { videoId: string }
 
       const runGrantView = async () =>
         grantViewExecution({
-          publicKey: aleoAddress,
+          publicKey: normalizedAleoAddress,
           programId: aleoProgramId,
           videoId,
-          tokenId,
+          tokenId: normalizedTokenId,
           requestExecution,
           requestTransaction,
         });
@@ -391,7 +402,7 @@ export default function VideoWatchPage({ params }: { params: { videoId: string }
 
         const fallbackProofRef = lastSomniaTxHash
           ? `wallet_tx_error:${lastSomniaTxHash}`
-          : `wallet_tx_error:${tokenId}`;
+          : `wallet_tx_error:${normalizedTokenId}`;
 
         await handleVerifyAndServe(fallbackProofRef);
         return;
@@ -411,7 +422,18 @@ export default function VideoWatchPage({ params }: { params: { videoId: string }
    * Step 3: Backend Verification & Decryption Key Serve
    */
   const handleVerifyAndServe = async (viewTokenRecord: string) => {
-    if (!somniaAddress) return;
+    const normalizedViewerAddress = somniaAddress?.trim();
+    const normalizedTokenId = tokenId.trim();
+    const normalizedRecord = viewTokenRecord.trim();
+
+    if (!normalizedViewerAddress || !normalizedTokenId || !normalizedRecord) {
+      setViewStep("error");
+      setStepMessage("Verification request is incomplete");
+      setErrorMessage("Missing viewerAddress, tokenId, or proof reference.");
+      setErrorAction("Reconnect wallets and retry the flow.");
+      addEvent("Backend verify blocked: incomplete request payload");
+      return;
+    }
 
     try {
       setViewStep("verifying");
@@ -422,9 +444,9 @@ export default function VideoWatchPage({ params }: { params: { videoId: string }
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          tokenId,
-          viewerAddress: somniaAddress,
-          consumedAleoRecord: viewTokenRecord,
+          tokenId: normalizedTokenId,
+          viewerAddress: normalizedViewerAddress,
+          consumedAleoRecord: normalizedRecord,
         }),
       });
 

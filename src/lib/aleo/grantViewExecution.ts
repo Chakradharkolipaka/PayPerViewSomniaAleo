@@ -20,7 +20,7 @@ export interface GrantViewExecutionResult {
 
 function extractTransactionId(raw: unknown): string | null {
   if (typeof raw === "string" && raw.trim()) {
-    return raw;
+    return raw.trim();
   }
 
   if (typeof raw !== "object" || raw === null) {
@@ -28,11 +28,20 @@ function extractTransactionId(raw: unknown): string | null {
   }
 
   const value = raw as Record<string, unknown>;
-  const direct = [value.transactionId, value.txId, value.id, value.result, value.data];
+  const direct = [
+    value.transactionId,
+    value.transactionID,
+    value.txId,
+    value.txID,
+    value.executionId,
+    value.id,
+    value.result,
+    value.data,
+  ];
 
   for (const item of direct) {
     if (typeof item === "string" && item.trim()) {
-      return item;
+      return item.trim();
     }
     if (typeof item === "object" && item !== null) {
       const nested = extractTransactionId(item);
@@ -202,7 +211,7 @@ export async function grantViewExecution(
       );
     }
 
-    return { transactionId };
+    return { transactionId: transactionId.trim() };
   } catch (error) {
     if (error instanceof ProofLayerError) {
       throw error;
