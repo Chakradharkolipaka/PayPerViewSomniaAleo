@@ -179,6 +179,8 @@ export default function VideoWatchPage({ params }: { params: { videoId: string }
   // Explorer URL
   const explorerUrl = "https://explorer.somnia.network/";
 
+  const createProofTraceId = () => `proof_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+
   const isRecordPermissionError = (message: string) => {
     const lowered = message.toLowerCase();
     return (
@@ -221,7 +223,13 @@ export default function VideoWatchPage({ params }: { params: { videoId: string }
       lowered.includes("wallettransactionerror") ||
       lowered.includes("requestexecution failed") ||
       lowered.includes("unknown error occurred") ||
-      lowered.includes("transaction error")
+      lowered.includes("transaction error") ||
+      lowered.includes("grantviewexecution:step-3") ||
+      lowered.includes("adapter_incompatibility") ||
+      lowered.includes("payload_schema_mismatch") ||
+      lowered.includes("network_mismatch") ||
+      lowered.includes("program_mismatch") ||
+      lowered.includes("input_mismatch")
     ) {
       return new AleoProofError("execution_failed", rawMessage);
     }
@@ -354,6 +362,7 @@ export default function VideoWatchPage({ params }: { params: { videoId: string }
   const handleGenerateALeoProof = async () => {
     const normalizedAleoAddress = aleoAddress?.trim();
     const normalizedTokenId = tokenId.trim();
+    const proofTraceId = createProofTraceId();
 
     if (!normalizedAleoAddress || !normalizedTokenId) {
       const mapped = ALEO_PROOF_ERRORS.invalid_address;
@@ -371,6 +380,7 @@ export default function VideoWatchPage({ params }: { params: { videoId: string }
       setErrorMessage("");
       setErrorAction("");
       addEvent("Starting Aleo proof generation");
+      addEvent(`Proof trace: ${proofTraceId}`);
 
       if (typeof requestExecution !== "function" && typeof requestTransaction !== "function") {
         throw new AleoProofError("sdk_unavailable", "Leo Wallet SDK execution methods are unavailable.");
@@ -382,6 +392,7 @@ export default function VideoWatchPage({ params }: { params: { videoId: string }
           programId: aleoProgramId,
           videoId,
           tokenId: normalizedTokenId,
+          traceId: proofTraceId,
           requestExecution,
           requestTransaction,
         });
@@ -392,19 +403,20 @@ export default function VideoWatchPage({ params }: { params: { videoId: string }
       addEvent(`Aleo proof generated tx: ${transactionId.slice(0, 16)}...`);
 
       // Step 3: Call backend verify-and-serve
-      await handleVerifyAndServe(transactionId);
+      await handleVerifyAndServe(transactionId, proofTraceId);
     } catch (err: unknown) {
       const proofError = classifyProofError(err);
 
       if (proofError.code === "execution_failed") {
         addEvent("Aleo proof execution failed in wallet. Falling back to ownership verification path.");
         setStepMessage("Aleo proof failed in wallet. Verifying ownership on backend...");
+        setErrorMessage(proofError.message);
 
         const fallbackProofRef = lastSomniaTxHash
           ? `wallet_tx_error:${lastSomniaTxHash}`
           : `wallet_tx_error:${normalizedTokenId}`;
 
-        await handleVerifyAndServe(fallbackProofRef);
+        await handleVerifyAndServe(fallbackProofRef, proofTraceId);
         return;
       }
 
@@ -421,7 +433,7 @@ export default function VideoWatchPage({ params }: { params: { videoId: string }
   /**
    * Step 3: Backend Verification & Decryption Key Serve
    */
-  const handleVerifyAndServe = async (viewTokenRecord: string) => {
+  const handleVerifyAndServe = async (viewTokenRecord: string, proofTraceId?: string) => {
     const normalizedViewerAddress = somniaAddress?.trim();
     const normalizedTokenId = tokenId.trim();
     const normalizedRecord = viewTokenRecord.trim();
@@ -439,6 +451,9 @@ export default function VideoWatchPage({ params }: { params: { videoId: string }
       setViewStep("verifying");
       setStepMessage("Verifying access on server...");
       addEvent("Calling /api/verify-and-serve");
+      if (proofTraceId) {
+        addEvent(`Verify trace: ${proofTraceId}`);
+      }
 
       const res = await fetch("/api/verify-and-serve", {
         method: "POST",
@@ -447,6 +462,7 @@ export default function VideoWatchPage({ params }: { params: { videoId: string }
           tokenId: normalizedTokenId,
           viewerAddress: normalizedViewerAddress,
           consumedAleoRecord: normalizedRecord,
+          proofTraceId,
         }),
       });
 

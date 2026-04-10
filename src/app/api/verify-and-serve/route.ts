@@ -14,6 +14,7 @@ export async function POST(request: Request) {
           viewerAddress?: string;
           viewer?: string;
           consumedAleoRecord?: string;
+          proofTraceId?: string;
         }
       | null;
 
@@ -26,6 +27,7 @@ export async function POST(request: Request) {
     const viewerAddress = typeof viewerAddressRaw === "string" ? viewerAddressRaw.trim() : viewerAddressRaw;
     const consumedAleoRecord =
       typeof body.consumedAleoRecord === "string" ? body.consumedAleoRecord.trim() : body.consumedAleoRecord;
+    const proofTraceId = typeof body.proofTraceId === "string" ? body.proofTraceId.trim() : undefined;
 
     if (tokenId === undefined || tokenId === null || viewerAddress === undefined || viewerAddress === "") {
       return NextResponse.json(
@@ -47,7 +49,11 @@ export async function POST(request: Request) {
       consumedAleoRecord,
     });
 
-    return NextResponse.json(result);
+    if (debug && proofTraceId) {
+      console.debug("[api/verify-and-serve] proofTraceId:", proofTraceId);
+    }
+
+    return NextResponse.json({ ...result, proofTraceId: proofTraceId || "" });
   } catch (error) {
     if (error instanceof PPVServerError) {
       if (debug) {
